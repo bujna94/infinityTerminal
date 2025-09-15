@@ -14,6 +14,8 @@ html, body {
   background: var(--bg);
   color: var(--fg);
   font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
+  /* Prevent page-level scrollbars; the grid handles scrolling */
+  overflow: hidden;
 }
 
 #toolbar {
@@ -61,6 +63,26 @@ html, body {
   gap: 0;
   scroll-snap-type: none; /* disable column stickiness */
   will-change: scroll-position;
+  /* Dark scrollbar theme */
+  scrollbar-color: rgba(128,137,155,0.6) rgba(15,17,23,0.9);
+  scrollbar-width: thin;
+}
+
+/* WebKit scrollbar styling for the main grid */
+.grid::-webkit-scrollbar {
+  height: 10px;
+  background: rgba(15,17,23,0.9);
+}
+.grid::-webkit-scrollbar-track {
+  background: rgba(15,17,23,0.9);
+}
+.grid::-webkit-scrollbar-thumb {
+  background: rgba(79,115,255,0.45);
+  border-radius: 6px;
+  border: 2px solid rgba(15,17,23,0.9);
+}
+.grid::-webkit-scrollbar-thumb:hover {
+  background: rgba(79,115,255,0.65);
 }
 
 body.minimap-open .grid { bottom: var(--overview-h); }
@@ -94,6 +116,7 @@ body.minimap-open .grid { bottom: var(--overview-h); }
 
 /* xterm tweaks for dark bg */
 .xterm .xterm-viewport { background-color: var(--bg); }
+.xterm .xterm-viewport { overflow-x: hidden; }
 
 /* Edge add buttons as thin columns inside the grid */
 .edge-cell {
@@ -155,6 +178,7 @@ body.minimap-open .grid { bottom: var(--overview-h); }
   border-top: 1px solid rgba(255,255,255,0.06);
   z-index: 20;
   display: none;
+  overflow: hidden; /* never show scrollbars inside minimap container */
 }
 .minimap-open .overview { display: block; }
 .overview-resizer {
@@ -176,6 +200,7 @@ body.minimap-open .grid { bottom: var(--overview-h); }
 .overview-track {
   position: absolute;
   inset: 0 8px 0 8px;
+  overflow: hidden;
 }
 .overview-viewport {
   position: absolute;
@@ -204,3 +229,9 @@ body.minimap-open .grid { bottom: var(--overview-h); }
 }
 .ov-pane.bottom { border-bottom: none; }
 .ov-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Hide any scrollbars that might appear in the minimap container on WebKit */
+.overview::-webkit-scrollbar,
+.overview-track::-webkit-scrollbar {
+  display: none;
+}
