@@ -10,6 +10,18 @@ const shortcutsBtn = document.getElementById('shortcutsBtn');
 const shortcutsModal = document.getElementById('shortcutsModal');
 const shortcutsOverlay = document.getElementById('shortcutsOverlay');
 const shortcutsClose = document.getElementById('shortcutsClose');
+
+function openShortcuts() {
+  try { shortcutsOverlay.classList.remove('hidden'); } catch (_) {}
+  try { shortcutsModal.classList.remove('hidden'); } catch (_) {}
+}
+function closeShortcuts() {
+  try { shortcutsOverlay.classList.add('hidden'); } catch (_) {}
+  try { shortcutsModal.classList.add('hidden'); } catch (_) {}
+}
+function isShortcutsOpen() {
+  try { return !shortcutsModal.classList.contains('hidden'); } catch (_) { return false; }
+}
 const leftEdgeEl = document.querySelector('.edge-cell.left');
 const rightEdgeEl = document.querySelector('.edge-cell.right');
 const addLeftBtn = document.getElementById('addLeftCell');
@@ -304,15 +316,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (homeBtn) homeBtn.addEventListener('click', () => { scrollHome(true); });
     // Toolbar Reset button
     if (resetBtn) resetBtn.addEventListener('click', () => { resetToHome(true); });
-    // Toolbar Shortcuts popup
-    function openShortcuts() {
-      try { shortcutsOverlay.classList.remove('hidden'); } catch (_) {}
-      try { shortcutsModal.classList.remove('hidden'); } catch (_) {}
-    }
-    function closeShortcuts() {
-      try { shortcutsOverlay.classList.add('hidden'); } catch (_) {}
-      try { shortcutsModal.classList.add('hidden'); } catch (_) {}
-    }
     if (shortcutsBtn) shortcutsBtn.addEventListener('click', openShortcuts);
     if (shortcutsOverlay) shortcutsOverlay.addEventListener('click', closeShortcuts);
     if (shortcutsClose) shortcutsClose.addEventListener('click', closeShortcuts);
@@ -386,6 +389,14 @@ function resetToHome(scrollToStart = false) {
       t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable === true
     ));
     if (inEditable) return; // allow global shortcuts when focused in xterm's helper textarea
+    // Toggle Shortcuts: Cmd/Ctrl + / (accepts '?' or '/' key)
+    const modSlash = (isMac ? e.metaKey : e.ctrlKey) && (e.key === '/' || e.key === '?');
+    if (modSlash) {
+      e.preventDefault();
+      if (isShortcutsOpen()) closeShortcuts(); else openShortcuts();
+      return;
+    }
+
     // Add Column shortcuts
     const mod = isMac ? e.metaKey : e.ctrlKey;
     const addLeftCombo = mod && e.shiftKey && e.key === 'ArrowLeft';

@@ -114,8 +114,10 @@ html, body {
 }
 .modal {
   position: fixed;
-  top: 64px; left: 50%; transform: translateX(-50%);
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: min(560px, calc(100vw - 40px));
+  max-height: 70vh;
+  overflow: auto;
   background: #121622;
   color: var(--fg);
   border: 1px solid rgba(255,255,255,0.1);
