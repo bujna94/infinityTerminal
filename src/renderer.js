@@ -6,6 +6,7 @@ const grid = document.getElementById('grid');
 const homeBtn = document.getElementById('homeBtn');
 const resetBtn = document.getElementById('resetBtn');
 const shortcutsBtn = document.getElementById('shortcutsBtn');
+const minimapBtn = document.getElementById('minimapBtn');
 // overview removed
 const shortcutsModal = document.getElementById('shortcutsModal');
 const shortcutsOverlay = document.getElementById('shortcutsOverlay');
@@ -62,6 +63,7 @@ let _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : 
 let _fastScrolling = false;
 let _fastOffTimer = null;
 let _ovTimer = null; // overview refresh timer
+let _ovInvalidateTimer = null; // coalesced refresh timer
 
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
 let listenersInitialized = false;
@@ -171,23 +173,26 @@ function createTerminal(paneEl) {
   ro.observe(paneEl);
 
   // Register handlers in maps; single global IPC listeners dispatch here
-  dataHandlers.set(id, (data) => term.write(data));
+  dataHandlers.set(id, (data) => { term.write(data); scheduleOverviewRefresh(); });
   exitHandlers.set(id, (exitCode) => {
     term.write(`\r\n\x1b[31m[process exited with code ${exitCode}]\x1b[0m\r\n`);
   });
 
   term.onData((data) => {
     pty.write(id, data);
+    scheduleOverviewRefresh();
   });
 
   term.onResize(({ cols, rows }) => {
     pty.resize(id, cols, rows);
+    scheduleOverviewRefresh();
   });
 
   async function runLocalShell() {
     await pty.create({ id });
     fit();
     term.focus();
+    scheduleOverviewRefresh();
   }
 
   function focus() { term.focus(); }
@@ -219,6 +224,9 @@ function addColumnRight(scrollIntoView = false) {
   grid.insertBefore(node, rightEdgeEl);
   const index = columns.push({ top, bottom, el: node }) - 1;
   if (scrollIntoView) node.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' });
+  if (isMinimapOpen()) {
+    try { renderOverview(); updateOverviewViewport(); updateOverviewSnapshots(); } catch (_) {}
+  }
   return index;
 }
 
@@ -228,6 +236,9 @@ function addColumnLeft() {
   // Keep viewport stable after prepending
   // Do not nudge scrollLeft so the left + remains visible when revealed
   columns.unshift({ top, bottom, el: node });
+  if (isMinimapOpen()) {
+    try { renderOverview(); updateOverviewViewport(); updateOverviewSnapshots(); } catch (_) {}
+  }
   return 0;
 }
 
@@ -285,19 +296,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     } catch (_) {}
     updateEdgeSnapState();
-    // Overview removed
+    // Prepare overview minimap (start when toggled visible)
+    try { initOverviewInteractions(); } catch (_) {}
     // Edge cell buttons
     addLeftBtn.addEventListener('click', () => {
       // Add to the left and keep the + off-screen after creation
       addColumnLeft();
-      
+      try { renderOverview(); updateOverviewViewport(); } catch (_) {}
       updateEdgeSnapState();
     });
     addRightBtn.addEventListener('click', () => {
       // Add to the right, then ensure the right + hides just outside the last column
       addColumnRight(true);
       hideRightEdge(false);
-      
+      try { renderOverview(); updateOverviewViewport(); } catch (_) {}
       updateEdgeSnapState();
     });
     // Toolbar Home button
@@ -305,6 +317,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Toolbar Reset button
     if (resetBtn) resetBtn.addEventListener('click', () => { resetToHome(true); });
     if (shortcutsBtn) shortcutsBtn.addEventListener('click', openShortcuts);
+    if (minimapBtn) minimapBtn.addEventListener('click', () => { toggleMinimap(); });
     if (shortcutsOverlay) shortcutsOverlay.addEventListener('click', closeShortcuts);
     if (shortcutsClose) shortcutsClose.addEventListener('click', closeShortcuts);
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShortcuts(); }, { capture: true });
@@ -327,6 +340,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('resize', () => {
   for (const col of columns) { col.top.fit(); col.bottom.fit(); }
   updateEdgeSnapState();
+  if (isMinimapOpen()) { try { renderOverview(); updateOverviewViewport(); } catch (_) {} }
 });
 
 // Home: scroll back to the initially created two columns
@@ -362,6 +376,7 @@ function resetToHome(scrollToStart = false) {
   const idx2 = addColumnRight(false);
   homeLeftNode = columns[idx1]?.el || null;
   homeRightNode = columns[idx2]?.el || null;
+  if (isMinimapOpen()) { try { renderOverview(); updateOverviewViewport(); } catch (_) {} }
   if (scrollToStart && homeLeftNode && homeLeftNode.isConnected) {
     try { homeLeftNode.scrollIntoView({ behavior: 'auto', inline: 'start', block: 'nearest' }); _lastScrollLeft = grid.scrollLeft; } catch (_) {}
   }
@@ -383,6 +398,13 @@ function resetToHome(scrollToStart = false) {
     if (modSlash) {
       e.preventDefault();
       if (isShortcutsOpen()) closeShortcuts(); else openShortcuts();
+      return;
+    }
+    // Toggle Minimap: Cmd/Ctrl + Shift + M
+    const modMinimap = (isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && (e.key === 'm' || e.key === 'M');
+    if (modMinimap) {
+      e.preventDefault();
+      toggleMinimap();
       return;
     }
 
@@ -508,28 +530,39 @@ const overview = document.getElementById('overview');
 const ovTrack = document.getElementById('overviewTrack');
 const ovViewport = document.getElementById('overviewViewport');
 
+function isMinimapOpen() {
+  try { return document.body.classList.contains('minimap-open'); } catch (_) { return false; }
+}
+function openMinimap() {
+  try { document.body.classList.add('minimap-open'); } catch (_) {}
+  try { renderOverview(); updateOverviewViewport(); updateOverviewSnapshots(); } catch (_) {}
+  startOverviewLoop();
+}
+function closeMinimap() {
+  try { document.body.classList.remove('minimap-open'); } catch (_) {}
+  stopOverviewLoop();
+}
+function toggleMinimap() { if (isMinimapOpen()) closeMinimap(); else openMinimap(); }
+
 function renderOverview() {
   if (!ovTrack) return;
-  // Preserve viewport handle while rebuilding
   const vp = ovViewport && ovViewport.parentElement === ovTrack ? ovViewport : null;
   if (vp) ovTrack.removeChild(vp);
   while (ovTrack.firstChild) ovTrack.removeChild(ovTrack.firstChild);
   const n = columns.length;
   if (!n) return;
   const trackW = ovTrack.clientWidth || ovTrack.offsetWidth || 1;
-  // Use actual DOM widths to layout columns proportionally
-  const widths = columns.map(c => Math.max(1, c?.el?.offsetWidth || 0));
-  const totalW = widths.reduce((a,b)=>a+b,0) || 1;
+  const colWidths = columns.map(c => Math.max(1, c?.el?.offsetWidth || 0));
+  const totalW = colWidths.reduce((a,b)=>a+b,0) || 1;
   let acc = 0;
   for (let i = 0; i < n; i++) {
     const el = document.createElement('div');
     el.className = 'ov-col';
     el.dataset.index = String(i);
     const leftPx = Math.round((acc / totalW) * trackW);
-    const widthPx = Math.max(2, Math.round((widths[i] / totalW) * trackW));
+    const widthPx = Math.max(2, Math.round((colWidths[i] / totalW) * trackW));
     el.style.left = leftPx + 'px';
     el.style.width = widthPx + 'px';
-    // Two tiny panes with canvases to show real snapshots
     const pTop = document.createElement('div');
     pTop.className = 'ov-pane top';
     const cTop = document.createElement('canvas');
@@ -543,9 +576,8 @@ function renderOverview() {
     el.appendChild(pTop);
     el.appendChild(pBottom);
     ovTrack.appendChild(el);
-    acc += widths[i];
+    acc += colWidths[i];
   }
-  // Ensure viewport handle sits on top visually
   if (ovViewport) ovTrack.appendChild(ovViewport);
 }
 
@@ -553,15 +585,14 @@ function updateOverviewViewport() {
   if (!ovTrack || !ovViewport || !overview) return;
   const trackRect = ovTrack.getBoundingClientRect();
   let trackW = Math.max(0, trackRect.width);
-  if (trackW === 0) { // overlay just opened; retry next frame
-    requestAnimationFrame(updateOverviewViewport);
-    return;
-  }
-  const total = Math.max(1, grid.scrollWidth);
-  const visible = Math.max(1, grid.clientWidth);
-  const left = Math.max(0, Math.min(grid.scrollLeft, total - visible));
-  const vpLeft = (left / total) * trackW;
-  const vpW = Math.max(24, (visible / total) * trackW);
+  if (trackW === 0) { requestAnimationFrame(updateOverviewViewport); return; }
+  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
+  const rightEdge = (rightEdgeEl?.offsetWidth || 0);
+  const totalContent = Math.max(1, grid.scrollWidth - leftEdge - rightEdge);
+  const visible = Math.max(1, Math.min(totalContent, grid.clientWidth));
+  const leftContent = Math.max(0, Math.min(grid.scrollLeft - leftEdge, totalContent - visible));
+  const vpLeft = (leftContent / totalContent) * trackW;
+  const vpW = Math.max(24, (visible / totalContent) * trackW);
   ovViewport.style.left = Math.round(vpLeft) + 'px';
   ovViewport.style.width = Math.round(vpW) + 'px';
 }
@@ -574,12 +605,15 @@ function initOverviewInteractions() {
     return Math.max(0, Math.min(clientX - r.left, r.width));
   }
   function scrollToTrackPos(trackX) {
-    const total = Math.max(1, grid.scrollWidth);
-    const visible = Math.max(1, grid.clientWidth);
+    const leftEdge = (leftEdgeEl?.offsetWidth || 0);
+    const rightEdge = (rightEdgeEl?.offsetWidth || 0);
+    const totalContent = Math.max(1, grid.scrollWidth - leftEdge - rightEdge);
+    const visible = Math.max(1, Math.min(totalContent, grid.clientWidth));
     const trackW = Math.max(1, ovTrack.getBoundingClientRect().width);
-    const desiredLeft = (trackX / trackW) * total - (visible / 2);
-    const maxLeft = Math.max(0, total - visible);
-    const target = Math.max(0, Math.min(desiredLeft, maxLeft));
+    const desiredLeftContent = (trackX / trackW) * totalContent - (visible / 2);
+    const maxLeftContent = Math.max(0, totalContent - visible);
+    const targetContent = Math.max(0, Math.min(desiredLeftContent, maxLeftContent));
+    const target = leftEdge + targetContent;
     _programmaticScroll = true;
     try { grid.scrollTo({ left: target, behavior: 'auto' }); } catch (_) { grid.scrollLeft = target; }
     _programmaticScroll = false;
@@ -606,31 +640,58 @@ function startOverviewLoop() { if (_ovTimer) return; _ovTimer = setInterval(() =
 
 function stopOverviewLoop() { if (_ovTimer) { clearInterval(_ovTimer); _ovTimer = null; } }
 
-// obsolete functions removed: renderOverview/updateOverviewViewport/updateOverviewSnapshots
+// Update snapshots for each overview column from live xterm canvases
+function updateOverviewSnapshots() {
+  if (!ovTrack) return;
+  const items = ovTrack.querySelectorAll('.ov-col');
+  items.forEach((el) => {
+    const i = Number(el.dataset.index || '-1');
+    if (!(i >= 0 && i < columns.length)) return;
+    const col = columns[i];
+    const topCanvas = el.querySelector('.ov-pane.top canvas');
+    const botCanvas = el.querySelector('.ov-pane.bottom canvas');
+    function collectSourceCanvases(paneEl) {
+      const termEl = paneEl?.querySelector('.term');
+      if (!termEl) return [];
+      const cvs = Array.from(termEl.querySelectorAll('canvas'));
+      return cvs.filter(c => (c.width || c.getBoundingClientRect().width));
+    }
+    const srcTop = collectSourceCanvases(col?.top?.pane);
+    const srcBot = collectSourceCanvases(col?.bottom?.pane);
+    if (srcTop.length && topCanvas) compositeAndScale(srcTop, topCanvas); else if (topCanvas) drawTextMinimap(col?.top?.term, topCanvas);
+    if (srcBot.length && botCanvas) compositeAndScale(srcBot, botCanvas); else if (botCanvas) drawTextMinimap(col?.bottom?.term, botCanvas);
+  });
+}
 
 function compositeAndScale(srcCanvases, destCanvas) {
   try {
     const d = destCanvas;
     const rect = d.getBoundingClientRect();
-    const w = Math.max(2, Math.floor(rect.width));
-    const h = Math.max(2, Math.floor(rect.height));
+    const wCss = Math.max(2, Math.floor(rect.width));
+    const hCss = Math.max(2, Math.floor(rect.height));
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const w = wCss * dpr;
+    const h = hCss * dpr;
     if (d.width !== w) d.width = w;
     if (d.height !== h) d.height = h;
     const ctx = d.getContext('2d');
     if (!ctx) return;
-    ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels at HiDPI resolution
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = 'high'; } catch (_) {}
     // Composite all source canvases onto an offscreen canvas at source resolution
     let sw = 0, sh = 0;
     srcCanvases.forEach(c => { sw = Math.max(sw, c.width || c.getBoundingClientRect().width); sh = Math.max(sh, c.height || c.getBoundingClientRect().height); });
     sw = Math.max(1, sw); sh = Math.max(1, sh);
     const off = document.createElement('canvas'); off.width = sw; off.height = sh;
     const offctx = off.getContext('2d'); if (!offctx) return;
-    offctx.imageSmoothingEnabled = false;
+    offctx.imageSmoothingEnabled = true;
+    try { offctx.imageSmoothingQuality = 'high'; } catch (_) {}
     offctx.clearRect(0, 0, sw, sh);
     srcCanvases.forEach(c => { if (c.width && c.height) offctx.drawImage(c, 0, 0); });
     // Now scale composite
-    ctx.clearRect(0, 0, w, h);
-    ctx.drawImage(off, 0, 0, sw, sh, 0, 0, w, h);
+    ctx.clearRect(0, 0, wCss, hCss);
+    ctx.drawImage(off, 0, 0, sw, sh, 0, 0, wCss, hCss);
   } catch (_) { /* ignore */ }
 }
 
@@ -639,34 +700,54 @@ function drawTextMinimap(term, destCanvas) {
   try {
     const d = destCanvas;
     const rect = d.getBoundingClientRect();
-    const w = Math.max(30, Math.floor(rect.width));
-    const h = Math.max(14, Math.floor(rect.height));
+    const wCss = Math.max(30, Math.floor(rect.width));
+    const hCss = Math.max(14, Math.floor(rect.height));
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const w = wCss * dpr;
+    const h = hCss * dpr;
     if (d.width !== w) d.width = w;
     if (d.height !== h) d.height = h;
     const ctx = d.getContext('2d'); if (!ctx) return;
-    ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = 'high'; } catch (_) {}
     ctx.fillStyle = '#0d1321';
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, wCss, hCss);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, wCss, hCss);
+    ctx.clip();
     ctx.fillStyle = '#9fb3ff';
-    const rows = Math.max(6, Math.floor(h / 6));
-    const lineH = h / rows;
+    // Choose font and spacing to avoid overlap: compute rows from step size
+    const padding = 2;
+    const availH = Math.max(4, hCss - padding * 2);
+    const minFont = 6, maxFont = 10, gap = 1;
+    // Start with a target font size scaled to height, then recompute rows to fit with gap
+    let fontPx = Math.min(maxFont, Math.max(minFont, Math.floor(availH / 6)));
+    let lineStep = fontPx + gap;
+    let rows = Math.max(3, Math.floor(availH / lineStep));
+    // Adjust font down a bit if too tight
+    if (rows < 3) { rows = 3; fontPx = Math.max(minFont, Math.floor((availH - (rows - 1) * gap) / rows)); lineStep = fontPx + gap; }
     const buf = term.buffer?.active;
-    const total = buf?.length || term.rows || 24;
-    const baseY = buf?.baseY || 0;
-    // Sample last N lines from the buffer
+    const bufLen = (buf && typeof buf.length === 'number') ? buf.length : (term.rows || 24);
+    const viewportY = (buf && typeof buf.viewportY === 'number') ? buf.viewportY : null;
+    const cursorY = (buf && typeof buf.cursorY === 'number') ? buf.cursorY : (term._core?.buffer?.y ?? 0);
+    const baseY = (buf && typeof buf.baseY === 'number') ? buf.baseY : 0;
+    // Prefer current viewport start; fallback to approximate bottom-aligned window
+    let startY = viewportY;
+    if (startY == null) startY = Math.max(0, baseY + cursorY - (term.rows || rows) + 1);
     for (let r = 0; r < rows; r++) {
-      const y = Math.max(0, baseY - rows + 1 + r);
+      const y = Math.max(0, Math.min(bufLen - 1, startY + r));
       let text = '';
       try { text = buf?.getLine ? (buf.getLine(y)?.translateToString(true) || '') : ''; } catch (_) { text = ''; }
-      // Truncate text to fit roughly
-      if (text) {
-        const yPix = Math.floor(r * lineH);
-        ctx.font = '6px Menlo, Monaco, Consolas, monospace';
-        ctx.textBaseline = 'top';
-        const maxChars = Math.max(5, Math.floor(w / 3));
-        ctx.fillText(text.slice(0, maxChars), 2, yPix);
-      }
+      const yPix = padding + Math.floor(r * lineStep);
+      ctx.font = `${fontPx}px Menlo, Monaco, Consolas, monospace`;
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#9fb3ff';
+      const maxChars = Math.max(6, Math.floor((wCss - 4) / Math.max(3, Math.floor(fontPx * 0.6))));
+      if (text) ctx.fillText(text.slice(0, maxChars), 2, yPix);
     }
+    ctx.restore();
   } catch (_) { /* ignore */ }
 }
 
@@ -676,6 +757,7 @@ function updateEdgeSnapState() { /* stickiness disabled */ }
 // Re-evaluate snapping as user scrolls and gently continue to hide + when nudged inward
 grid.addEventListener('scroll', () => {
   updateEdgeSnapState();
+  try { updateOverviewViewport(); } catch (_) {}
   if (_programmaticScroll) { _lastScrollLeft = grid.scrollLeft; return; }
   // Stickiness disabled
   _lastScrollLeft = grid.scrollLeft;
@@ -722,3 +804,11 @@ grid.addEventListener('scroll', () => {
   }
 });
 // Overview removed
+function scheduleOverviewRefresh() {
+  if (!isMinimapOpen()) return;
+  if (_ovInvalidateTimer) return;
+  _ovInvalidateTimer = setTimeout(() => {
+    _ovInvalidateTimer = null;
+    try { updateOverviewSnapshots(); updateOverviewViewport(); } catch (_) {}
+  }, 80);
+}
