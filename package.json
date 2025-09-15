@@ -1,6 +1,6 @@
 {
   "name": "terminal-grid",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Fullscreen 2xN horizontally scrollable terminal app",
   "main": "electron/main.js",
