@@ -60,11 +60,17 @@ ipcMain.handle('pty:create', (event, payload) => {
   const rows = 24;
 
   const proc = pty.spawn(shell, args, {
-    name: 'xterm-color',
+    name: 'xterm-256color',
     cols,
     rows,
     cwd,
-    env: { ...process.env, ...env },
+    env: {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      CLICOLOR: '1',
+      ...env,
+    },
   });
 
   ptys.set(id, proc);

@@ -133,7 +133,9 @@ function createTerminal(paneEl) {
     fontFamily: 'Menlo, Monaco, Consolas, monospace',
     rendererType: 'canvas',
     theme: {
-      background: '#0f1117'
+      background: '#0f1117',
+      foreground: '#e5e9f0',
+      selectionBackground: 'rgba(79,115,255,0.25)'
     },
   });
 
