@@ -4,6 +4,8 @@ let TerminalCtor = (window.xterm && window.xterm.Terminal) || window.Terminal;
 
 const grid = document.getElementById('grid');
 const sshBtn = document.getElementById('sshBtn');
+const homeBtn = document.getElementById('homeBtn');
+const resetBtn = document.getElementById('resetBtn');
 const leftEdgeEl = document.querySelector('.edge-cell.left');
 const rightEdgeEl = document.querySelector('.edge-cell.right');
 const addLeftBtn = document.getElementById('addLeftCell');
@@ -30,6 +32,8 @@ if (!pty) {
 }
 
 const columns = []; // [{top: TermRef, bottom: TermRef, el: HTMLElement}]
+let homeLeftNode = null; // DOM node for the first created column
+let homeRightNode = null; // DOM node for the second created column
 let isAdding = false;
 
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
@@ -259,12 +263,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   try {
     TerminalCtor = await waitForXterm(4000);
-    // Seed with two visible columns (four terminals)
-    addColumnRight(false);
-    addColumnRight(false);
+    // Seed with two visible columns (four terminals) and mark as Home
+    const idx1 = addColumnRight(false);
+    const idx2 = addColumnRight(false);
+    homeLeftNode = columns[idx1]?.el || null;
+    homeRightNode = columns[idx2]?.el || null;
     // Edge cell buttons
     addLeftBtn.addEventListener('click', () => { addColumnLeft(); });
     addRightBtn.addEventListener('click', () => { addColumnRight(true); });
+    // Toolbar Home button
+    if (homeBtn) homeBtn.addEventListener('click', () => { scrollHome(true); });
+    // Toolbar Reset button
+    if (resetBtn) resetBtn.addEventListener('click', () => { resetToHome(true); });
     initIpcDispatch();
   } catch (e) {
     console.error('Failed to initialize xterm:', e);
@@ -283,3 +293,56 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('resize', () => {
   for (const col of columns) { col.top.fit(); col.bottom.fit(); }
 });
+
+// Home: scroll back to the initially created two columns
+function scrollHome(smooth = true) {
+  const behavior = smooth ? 'smooth' : 'auto';
+  if (homeLeftNode && homeLeftNode.isConnected) {
+    try { homeLeftNode.scrollIntoView({ behavior, inline: 'start', block: 'nearest' }); return; } catch (_) {}
+  }
+  // Fallback if original nodes are missing
+  try { grid.scrollLeft = 0; } catch (_) {}
+}
+
+// Reset to Home: dispose all and recreate the two original columns, update home anchors
+function resetToHome(scrollToStart = false) {
+  try {
+    for (const col of columns) {
+      try { col.top.dispose(); } catch (_) {}
+      try { col.bottom.dispose(); } catch (_) {}
+      try { col.el.remove(); } catch (_) {}
+    }
+  } finally {
+    columns.length = 0;
+  }
+  if (scrollToStart) {
+    try { grid.scrollLeft = 0; } catch (_) {}
+  }
+  const idx1 = addColumnRight(false);
+  const idx2 = addColumnRight(false);
+  homeLeftNode = columns[idx1]?.el || null;
+  homeRightNode = columns[idx2]?.el || null;
+  if (scrollToStart && homeLeftNode && homeLeftNode.isConnected) {
+    try { homeLeftNode.scrollIntoView({ behavior: 'auto', inline: 'start', block: 'nearest' }); } catch (_) {}
+  }
+}
+
+// Keyboard shortcut: Home (Command+Shift+H on macOS, Ctrl+Shift+H elsewhere)
+(() => {
+  const isMac = (window.platform && window.platform.isMac) ||
+                (typeof process !== 'undefined' && process.platform === 'darwin');
+  window.addEventListener('keydown', (e) => {
+    const t = e.target;
+    const isXtermTextarea = !!(t && t.tagName === 'TEXTAREA' && t.classList && t.classList.contains('xterm-helper-textarea'));
+    const inEditable = !isXtermTextarea && !!(t && (
+      t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable === true
+    ));
+    if (inEditable) return; // allow global shortcuts when focused in xterm's helper textarea
+    const hKey = e.key === 'h' || e.key === 'H';
+    const combo = isMac ? (e.metaKey && e.shiftKey && hKey) : (e.ctrlKey && e.shiftKey && hKey);
+    if (combo) {
+      e.preventDefault();
+      scrollHome(true);
+    }
+  }, { capture: true });
+})();
