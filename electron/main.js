@@ -16,6 +16,7 @@ function createWindow() {
     simpleFullscreen: true,
     fullscreenable: true,
     titleBarStyle: 'hiddenInset',
+    icon: path.join(__dirname, '..', 'resources', 'appLogo.png'),
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,

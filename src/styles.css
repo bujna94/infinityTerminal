@@ -50,8 +50,17 @@ html, body {
   color: var(--fg);
   opacity: 0.95;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
+
+.brand-logo {
+  height: 18px;
+  width: auto;
+  display: inline-block;
+}
 
 .grid {
   position: absolute;

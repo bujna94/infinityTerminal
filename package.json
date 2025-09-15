@@ -27,6 +27,7 @@
     "files": [
       "electron/**/*",
       "src/**/*",
+      "resources/**/*",
       "scripts/**/*",
       "package.json",
       "!**/node_modules/.cache/**"
