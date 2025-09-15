@@ -11,6 +11,13 @@ const minimapBtn = document.getElementById('minimapBtn');
 const shortcutsModal = document.getElementById('shortcutsModal');
 const shortcutsOverlay = document.getElementById('shortcutsOverlay');
 const shortcutsClose = document.getElementById('shortcutsClose');
+// Update modal elements
+const updateModal = document.getElementById('updateModal');
+const updateOverlay = document.getElementById('updateOverlay');
+const updateClose = document.getElementById('updateClose');
+const updateNowBtn = document.getElementById('updateNowBtn');
+const updateLaterBtn = document.getElementById('updateLaterBtn');
+const updateMessage = document.getElementById('updateMessage');
 
 function openShortcuts() {
   try { shortcutsOverlay.classList.remove('hidden'); } catch (_) {}
@@ -64,6 +71,9 @@ let _fastScrolling = false;
 let _fastOffTimer = null;
 let _ovTimer = null; // overview refresh timer
 let _ovInvalidateTimer = null; // coalesced refresh timer
+
+// Track the most recently focused terminal (for copy/paste)
+let _activeTermRef = null; // { id, term }
 
 // Host coloring for SSH sessions
 const DEFAULT_BG = '#0f1117';
@@ -199,6 +209,10 @@ function createTerminal(paneEl) {
   let disposed = false;
   let exited = false;
   let overlayEl = null;
+
+  // Update active terminal on focus/click for clipboard operations
+  try { term.onFocus(() => { _activeTermRef = { id, term }; }); } catch (_) {}
+  try { paneEl.addEventListener('mousedown', () => { _activeTermRef = { id, term }; }); } catch (_) {}
 
   function measureCharSize(el) {
     // Create an offscreen measurer to estimate char cell size
@@ -528,6 +542,55 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (_) {}
     }
   } catch (_) {}
+
+  // Updates: show modal when main process reports a new version
+  try {
+    const openUpdate = (payload) => {
+      try {
+        if (payload && payload.version) {
+          const cur = (payload.currentVersion || '').trim();
+          const latest = String(payload.version).trim();
+          updateMessage.textContent = cur
+            ? `Infinity Terminal ${latest} is available. You have ${cur}.`
+            : `Infinity Terminal ${latest} is available.`;
+        } else {
+          updateMessage.textContent = 'A new version is available.';
+        }
+      } catch (_) {}
+      try { updateOverlay.classList.remove('hidden'); } catch (_) {}
+      try { updateModal.classList.remove('hidden'); } catch (_) {}
+      const url = payload && payload.url;
+      const onClick = () => {
+        try {
+          if (window.updates && typeof window.updates.openExternal === 'function') {
+            window.updates.openExternal(url);
+          } else {
+            const { shell } = require('electron');
+            if (shell && url) shell.openExternal(url);
+          }
+        } catch (_) {}
+      };
+      if (updateNowBtn) updateNowBtn.onclick = onClick;
+    };
+    if (window.updates && typeof window.updates.onAvailable === 'function') {
+      window.updates.onAvailable(openUpdate);
+    } else {
+      try {
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.on('update:available', (_evt, payload) => openUpdate(payload));
+      } catch (_) {}
+    }
+  } catch (_) {}
+  // Update modal close handlers
+  try {
+    const closeUpdate = () => {
+      try { updateOverlay.classList.add('hidden'); } catch (_) {}
+      try { updateModal.classList.add('hidden'); } catch (_) {}
+    };
+    if (updateOverlay) updateOverlay.addEventListener('click', closeUpdate);
+    if (updateClose) updateClose.addEventListener('click', closeUpdate);
+    if (updateLaterBtn) updateLaterBtn.addEventListener('click', closeUpdate);
+  } catch (_) {}
   try {
     await waitForPty(4000);
   } catch (e) {
@@ -645,6 +708,42 @@ function resetToHome(scrollToStart = false) {
       t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable === true
     ));
     if (inEditable) return; // allow global shortcuts when focused in xterm's helper textarea
+    // Copy: Cmd/Ctrl + C (only if a selection exists in active terminal)
+    const modCopy = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && (e.key === 'c' || e.key === 'C');
+    if (modCopy && _activeTermRef && _activeTermRef.term && typeof _activeTermRef.term.hasSelection === 'function' && _activeTermRef.term.hasSelection()) {
+      try {
+        const text = _activeTermRef.term.getSelection();
+        if (text) {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
+          else {
+            const { clipboard } = require('electron');
+            if (clipboard) clipboard.writeText(text);
+          }
+        }
+      } catch (_) {}
+      e.preventDefault();
+      return;
+    }
+    // Paste: Cmd/Ctrl + V
+    const modPaste = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && (e.key === 'v' || e.key === 'V');
+    if (modPaste && _activeTermRef && _activeTermRef.id) {
+      e.preventDefault();
+      try {
+        const doPaste = async () => {
+          try {
+            let text = '';
+            if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
+            else {
+              const { clipboard } = require('electron');
+              if (clipboard) text = clipboard.readText();
+            }
+            if (text) pty.write(_activeTermRef.id, text);
+          } catch (_) {}
+        };
+        doPaste();
+      } catch (_) {}
+      return;
+    }
     // Toggle Shortcuts: Cmd/Ctrl + / (accepts '?' or '/' key)
     const modSlash = (isMac ? e.metaKey : e.ctrlKey) && (e.key === '/' || e.key === '?');
     if (modSlash) {

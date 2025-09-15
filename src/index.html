@@ -53,6 +53,22 @@
       </div>
     </div>
 
+    <!-- Update Available Modal -->
+    <div id="updateOverlay" class="modal-overlay hidden"></div>
+    <div id="updateModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
+      <div class="modal-header">
+        <h2 id="updateTitle">Update Available</h2>
+        <button id="updateClose" class="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="updateMessage" style="margin-bottom: 12px;">A new version is available.</div>
+        <div style="display:flex; gap:8px;">
+          <button id="updateNowBtn" class="modal-close" style="background:#2c7be5; border-color:#2c7be5; color:white;">Download Update</button>
+          <button id="updateLaterBtn" class="modal-close">Later</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Horizontal Minimap / Overview -->
     <div id="overview" class="overview">
       <div id="overviewResizer" class="overview-resizer" title="Drag to resize minimap"></div>

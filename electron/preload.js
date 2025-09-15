@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
@@ -21,6 +21,14 @@ contextBridge.exposeInMainWorld('windowState', {
   onTrafficVisible: (cb) => ipcRenderer.on('window:traffic-visible', (_evt, visible) => {
     try { cb(!!visible); } catch (_) {}
   }),
+});
+
+// Updates bridge: notify renderer when a new version is available
+contextBridge.exposeInMainWorld('updates', {
+  onAvailable: (cb) => ipcRenderer.on('update:available', (_evt, payload) => {
+    try { cb(payload); } catch (_) {}
+  }),
+  openExternal: (url) => { try { if (url) shell.openExternal(url); } catch (_) {} },
 });
 
 // Dynamically import xterm ESM and expose safely to the renderer
