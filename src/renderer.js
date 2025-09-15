@@ -35,6 +35,9 @@ const columns = []; // [{top: TermRef, bottom: TermRef, el: HTMLElement}]
 let homeLeftNode = null; // DOM node for the first created column
 let homeRightNode = null; // DOM node for the second created column
 let isAdding = false;
+let _programmaticScroll = false; // guard to avoid feedback loops
+let _lastScrollLeft = 0;
+let _hideEdgeTimer = null;
 
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
 let listenersInitialized = false;
@@ -268,7 +271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     homeLeftNode = columns[idx1]?.el || null;
     homeRightNode = columns[idx2]?.el || null;
     // Hide left edge by default so + is off-screen initially
-    try { grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0); } catch (_) {}
+    try { grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0); _lastScrollLeft = grid.scrollLeft; } catch (_) {}
     updateEdgeSnapState();
     // Edge cell buttons
     addLeftBtn.addEventListener('click', () => {
@@ -307,17 +310,18 @@ window.addEventListener('resize', () => {
 });
 
 // Home: scroll back to the initially created two columns
-function scrollHome(smooth = true) {
-  const behavior = smooth ? 'smooth' : 'auto';
+function scrollHome(_smooth = false) {
   const leftEdge = (leftEdgeEl?.offsetWidth || 0);
-  if (homeLeftNode && homeLeftNode.isConnected) {
-    const target = Math.max(0, (homeLeftNode.offsetLeft || 0));
-    try { grid.scrollTo({ left: target, behavior }); return; } catch (_) {}
-    try { grid.scrollLeft = target; return; } catch (_) {}
-  }
-  // Fallback: align so left edge is hidden
-  try { grid.scrollLeft = leftEdge; } catch (_) {}
-  updateEdgeSnapState();
+  const w = columnWidth();
+  let idx = columns.findIndex(c => c.el === homeLeftNode);
+  if (idx < 0) idx = 0;
+  const target = Math.max(0, leftEdge + (idx * w));
+  _programmaticScroll = true;
+  try { grid.classList.add('no-snap'); } catch (_) {}
+  try { grid.scrollTo({ left: target, behavior: 'auto' }); }
+  catch (_) { grid.scrollLeft = target; }
+  _lastScrollLeft = target;
+  setTimeout(() => { _programmaticScroll = false; updateEdgeSnapState(); }, 50);
 }
 
 // Reset to Home: dispose all and recreate the two original columns, update home anchors
@@ -332,14 +336,14 @@ function resetToHome(scrollToStart = false) {
     columns.length = 0;
   }
   if (scrollToStart) {
-    try { grid.scrollLeft = 0; } catch (_) {}
+    try { grid.scrollLeft = 0; _lastScrollLeft = grid.scrollLeft; } catch (_) {}
   }
   const idx1 = addColumnRight(false);
   const idx2 = addColumnRight(false);
   homeLeftNode = columns[idx1]?.el || null;
   homeRightNode = columns[idx2]?.el || null;
   if (scrollToStart && homeLeftNode && homeLeftNode.isConnected) {
-    try { homeLeftNode.scrollIntoView({ behavior: 'auto', inline: 'start', block: 'nearest' }); } catch (_) {}
+    try { homeLeftNode.scrollIntoView({ behavior: 'auto', inline: 'start', block: 'nearest' }); _lastScrollLeft = grid.scrollLeft; } catch (_) {}
   }
 }
 
@@ -366,9 +370,10 @@ function resetToHome(scrollToStart = false) {
 function hideRightEdge(smooth = false) {
   const behavior = smooth ? 'smooth' : 'auto';
   const rightEdge = (rightEdgeEl?.offsetWidth || 0);
-  const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth - rightEdge);
-  const target = maxLeft;
+  const target = Math.max(0, grid.scrollWidth - grid.clientWidth - rightEdge);
+  _programmaticScroll = true;
   try { grid.scrollTo({ left: target, behavior }); } catch (_) { grid.scrollLeft = target; }
+  setTimeout(() => { _programmaticScroll = false; updateEdgeSnapState(); }, 120);
   updateEdgeSnapState();
 }
 
@@ -377,14 +382,42 @@ function updateEdgeSnapState() {
   const leftEdge = (leftEdgeEl?.offsetWidth || 0);
   const rightEdge = (rightEdgeEl?.offsetWidth || 0);
   const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
-  const nearLeft = grid.scrollLeft <= (leftEdge + 4);
-  const nearRight = grid.scrollLeft >= (maxLeft - rightEdge - 4);
-  if (nearLeft || nearRight) {
-    grid.classList.add('no-snap');
-  } else {
-    grid.classList.remove('no-snap');
-  }
+  const slack = 4; // tolerance where edges count as visible
+  const nearLeft = grid.scrollLeft <= (leftEdge + slack);
+  const nearRight = grid.scrollLeft >= (maxLeft - rightEdge - slack);
+  if (nearLeft || nearRight) grid.classList.add('no-snap'); else grid.classList.remove('no-snap');
 }
 
-// Re-evaluate snapping as user scrolls
-grid.addEventListener('scroll', () => updateEdgeSnapState());
+// Re-evaluate snapping as user scrolls and gently continue to hide + when nudged inward
+grid.addEventListener('scroll', () => {
+  updateEdgeSnapState();
+  if (_programmaticScroll) { _lastScrollLeft = grid.scrollLeft; return; }
+
+  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
+  const rightEdge = (rightEdgeEl?.offsetWidth || 0);
+  const maxScrollLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
+  const delta = grid.scrollLeft - _lastScrollLeft;
+  _lastScrollLeft = grid.scrollLeft;
+
+  function scheduleHide(target) {
+    if (_hideEdgeTimer) clearTimeout(_hideEdgeTimer);
+    _hideEdgeTimer = setTimeout(() => {
+      _programmaticScroll = true;
+      try { grid.scrollTo({ left: target, behavior: 'smooth' }); } catch (_) { grid.scrollLeft = target; }
+      setTimeout(() => { _programmaticScroll = false; }, 120);
+    }, 40);
+  }
+
+  // Left edge visible: if user scrolls right a bit, complete to hide
+  if (delta > 0 && grid.scrollLeft > 0 && grid.scrollLeft < (leftEdge - 2)) {
+    scheduleHide(leftEdge);
+    return;
+  }
+
+  // Right edge visible: if user scrolls left a bit, complete to hide
+  const rightBandStart = Math.max(0, maxScrollLeft - rightEdge);
+  if (delta < 0 && grid.scrollLeft > (rightBandStart + 2)) {
+    scheduleHide(rightBandStart);
+    return;
+  }
+});
