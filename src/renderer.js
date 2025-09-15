@@ -215,8 +215,7 @@ function addColumnLeft() {
   const { node, top, bottom } = createColumnNode();
   grid.insertBefore(node, leftEdgeEl.nextSibling);
   // Keep viewport stable after prepending
-  const w = node.offsetWidth || Math.floor(grid.clientWidth / 2);
-  grid.scrollLeft += w;
+  // Do not nudge scrollLeft so the left + remains visible when revealed
   columns.unshift({ top, bottom, el: node });
   return 0;
 }
@@ -268,9 +267,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const idx2 = addColumnRight(false);
     homeLeftNode = columns[idx1]?.el || null;
     homeRightNode = columns[idx2]?.el || null;
+    // Hide left edge by default so + is off-screen initially
+    try { grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0); } catch (_) {}
+    updateEdgeSnapState();
     // Edge cell buttons
-    addLeftBtn.addEventListener('click', () => { addColumnLeft(); });
-    addRightBtn.addEventListener('click', () => { addColumnRight(true); });
+    addLeftBtn.addEventListener('click', () => {
+      // Add to the left and keep the + off-screen after creation
+      addColumnLeft();
+      updateEdgeSnapState();
+    });
+    addRightBtn.addEventListener('click', () => {
+      // Add to the right, then ensure the right + hides just outside the last column
+      addColumnRight(true);
+      hideRightEdge(false);
+      updateEdgeSnapState();
+    });
     // Toolbar Home button
     if (homeBtn) homeBtn.addEventListener('click', () => { scrollHome(true); });
     // Toolbar Reset button
@@ -292,16 +303,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Ensure full-screen columns refit on window resize
 window.addEventListener('resize', () => {
   for (const col of columns) { col.top.fit(); col.bottom.fit(); }
+  updateEdgeSnapState();
 });
 
 // Home: scroll back to the initially created two columns
 function scrollHome(smooth = true) {
   const behavior = smooth ? 'smooth' : 'auto';
+  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
   if (homeLeftNode && homeLeftNode.isConnected) {
-    try { homeLeftNode.scrollIntoView({ behavior, inline: 'start', block: 'nearest' }); return; } catch (_) {}
+    const target = Math.max(0, (homeLeftNode.offsetLeft || 0));
+    try { grid.scrollTo({ left: target, behavior }); return; } catch (_) {}
+    try { grid.scrollLeft = target; return; } catch (_) {}
   }
-  // Fallback if original nodes are missing
-  try { grid.scrollLeft = 0; } catch (_) {}
+  // Fallback: align so left edge is hidden
+  try { grid.scrollLeft = leftEdge; } catch (_) {}
+  updateEdgeSnapState();
 }
 
 // Reset to Home: dispose all and recreate the two original columns, update home anchors
@@ -346,3 +362,29 @@ function resetToHome(scrollToStart = false) {
     }
   }, { capture: true });
 })();
+
+function hideRightEdge(smooth = false) {
+  const behavior = smooth ? 'smooth' : 'auto';
+  const rightEdge = (rightEdgeEl?.offsetWidth || 0);
+  const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth - rightEdge);
+  const target = maxLeft;
+  try { grid.scrollTo({ left: target, behavior }); } catch (_) { grid.scrollLeft = target; }
+  updateEdgeSnapState();
+}
+
+// Toggle scroll snapping near edges so + buttons can remain visible once revealed
+function updateEdgeSnapState() {
+  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
+  const rightEdge = (rightEdgeEl?.offsetWidth || 0);
+  const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
+  const nearLeft = grid.scrollLeft <= (leftEdge + 4);
+  const nearRight = grid.scrollLeft >= (maxLeft - rightEdge - 4);
+  if (nearLeft || nearRight) {
+    grid.classList.add('no-snap');
+  } else {
+    grid.classList.remove('no-snap');
+  }
+}
+
+// Re-evaluate snapping as user scrolls
+grid.addEventListener('scroll', () => updateEdgeSnapState());

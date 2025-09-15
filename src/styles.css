@@ -49,12 +49,17 @@ html, body {
   display: flex; /* columns horizontally */
   align-items: stretch;
   gap: 0;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity; /* allow edges to be revealed without forced snap */
+}
+
+/* Disable snapping near edges so + buttons can remain visible */
+.grid.no-snap {
+  scroll-snap-type: none;
 }
 
 .column {
-  width: calc((100vw - (2 * var(--edge))) / 2); /* two columns + both edges visible */
-  min-width: calc((100vw - (2 * var(--edge))) / 2);
+  width: 50vw; /* keep edges off-screen by default */
+  min-width: 50vw;
   flex: 0 0 auto;
   display: grid;
   grid-template-rows: 1fr 1fr; /* two rows */
