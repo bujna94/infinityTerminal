@@ -8,14 +8,50 @@
     "start": "node scripts/rebuild-pty.js && electron .",
     "dev": "electron .",
     "postinstall": "echo skip",
-    "rebuild:pty": "node scripts/rebuild-pty.js"
+    "rebuild:pty": "node scripts/rebuild-pty.js",
+    "dist": "electron-builder --mac",
+    "dist:dmg": "electron-builder --mac dmg",
+    "dist:zip": "electron-builder --mac zip"
   },
   "dependencies": {
     "@xterm/xterm": "^5.5.0",
-    "electron": "^30.0.0",
     "node-pty": "^1.0.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "electron-builder": "^26.0.12",
+    "electron": "^30.0.0"
+  },
+  "build": {
+    "appId": "com.infinityterminal.app",
+    "productName": "Infinity Terminal",
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "scripts/**/*",
+      "package.json",
+      "!**/node_modules/.cache/**"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "resources/appLogo.icns",
+      "asarUnpack": [
+        "**/*.node",
+        "node_modules/node-pty/**"
+      ]
+    },
+    "dmg": {
+      "backgroundColor": "#0f1117",
+      "title": "Infinity Terminal Installer"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
   "engines": {
     "node": ">=18"
   }
