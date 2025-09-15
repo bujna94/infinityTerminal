@@ -42,6 +42,10 @@ let isAdding = false;
 let _programmaticScroll = false; // guard to avoid feedback loops
 let _lastScrollLeft = 0;
 let _hideEdgeTimer = null;
+let _holdDir = 0; // -1 left, 1 right
+let _holdRAF = null;
+let _holdLastTs = 0;
+let _holdStartTs = 0;
 let _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 let _fastScrolling = false;
 let _fastOffTimer = null;
@@ -398,6 +402,29 @@ function resetToHome(scrollToStart = false) {
       hideRightEdge(false);
       return;
     }
+    // Move by one column with Shift + Arrow keys (no Cmd/Ctrl)
+    const shiftOnly = e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (shiftOnly && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const delta = (e.key === 'ArrowRight') ? 1 : -1;
+      scrollByColumns(delta);
+      return;
+    }
+
+    // macOS: Option+Command+Left/Right navigation
+    if (isMac && e.metaKey && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      const dir = (e.key === 'ArrowRight') ? 1 : -1;
+      if (!e.repeat) {
+        // Single press: move exactly one column, do not start holding yet
+        scrollByColumns(dir);
+        stopHoldScroll();
+      } else {
+        // On key repeat while still holding, start/continue smooth scrolling
+        startHoldScroll(dir);
+      }
+      return;
+    }
     // Home shortcut
     const hKey = e.key === 'h' || e.key === 'H';
     const homeCombo = isMac ? (e.metaKey && e.shiftKey && hKey) : (e.ctrlKey && e.shiftKey && hKey);
@@ -406,7 +433,45 @@ function resetToHome(scrollToStart = false) {
       scrollHome(true);
     }
   }, { capture: true });
+  window.addEventListener('keyup', (e) => {
+    // Stop hold scroll when releasing any relevant key
+    if (e.key === 'Meta' || e.key === 'Alt' || e.key === 'Option' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      stopHoldScroll();
+    }
+  }, { capture: true });
 })();
+
+function startHoldScroll(dir) {
+  _holdDir = dir;
+  if (_holdRAF) return;
+  _programmaticScroll = true;
+  _holdLastTs = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  _holdStartTs = _holdLastTs;
+  const step = (ts) => {
+    if (_holdDir === 0) { _holdRAF = null; return; }
+    const now = ts || (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = Math.max(1, now - _holdLastTs);
+    _holdLastTs = now;
+    // Ramp speed: 1200 -> 2600 px/sec over ~350ms (ease-out)
+    const elapsed = Math.max(0, now - _holdStartTs);
+    const t = Math.min(1, elapsed / 350);
+    const easeOut = t * (2 - t); // quadratic ease-out
+    const speedPps = 1200 + (2600 - 1200) * easeOut; // pixels per second
+    const deltaPx = _holdDir * speedPps * (dt / 1000);
+    const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
+    let target = Math.max(0, Math.min(grid.scrollLeft + deltaPx, maxLeft));
+    try { grid.scrollLeft = target; } catch (_) { /* no-op */ }
+    _lastScrollLeft = grid.scrollLeft;
+    _holdRAF = requestAnimationFrame(step);
+  };
+  _holdRAF = requestAnimationFrame(step);
+}
+
+function stopHoldScroll() {
+  _holdDir = 0;
+  if (_holdRAF) { cancelAnimationFrame(_holdRAF); _holdRAF = null; }
+  _programmaticScroll = false;
+}
 
 function hideRightEdge(smooth = false) {
   const behavior = smooth ? 'smooth' : 'auto';
@@ -426,6 +491,20 @@ function hideLeftEdge(smooth = false) {
   try { grid.scrollTo({ left: target, behavior }); } catch (_) { grid.scrollLeft = target; }
   setTimeout(() => { _programmaticScroll = false; updateEdgeSnapState(); }, 120);
   updateEdgeSnapState();
+}
+
+function scrollByColumns(delta) {
+  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
+  const w = columnWidth();
+  const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
+  const current = grid.scrollLeft;
+  const idx = Math.round(Math.max(0, (current - leftEdge)) / Math.max(1, w));
+  const targetIdx = Math.max(0, Math.min(columns.length - 1, idx + delta));
+  let target = leftEdge + targetIdx * w;
+  target = Math.max(0, Math.min(target, maxLeft));
+  _programmaticScroll = true;
+  try { grid.scrollTo({ left: target, behavior: 'smooth' }); } catch (_) { grid.scrollLeft = target; }
+  setTimeout(() => { _programmaticScroll = false; _lastScrollLeft = grid.scrollLeft; }, 160);
 }
 
 // Toggle scroll snapping near edges so + buttons can remain visible once revealed

@@ -50,6 +50,7 @@ html, body {
   align-items: stretch;
   gap: 0;
   scroll-snap-type: none; /* disable column stickiness */
+  will-change: scroll-position;
 }
 
 /* Disable snapping near edges so + buttons can remain visible */
