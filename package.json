@@ -1,0 +1,22 @@
+{
+  "name": "terminal-grid",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fullscreen 2xN horizontally scrollable terminal app",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node scripts/rebuild-pty.js && electron .",
+    "dev": "electron .",
+    "postinstall": "echo skip",
+    "rebuild:pty": "node scripts/rebuild-pty.js"
+  },
+  "dependencies": {
+    "@xterm/xterm": "^5.5.0",
+    "electron": "^30.0.0",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}

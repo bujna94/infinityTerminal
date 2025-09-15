@@ -1,0 +1,31 @@
+const { contextBridge, ipcRenderer } = require('electron');
+const path = require('path');
+const { pathToFileURL } = require('url');
+
+contextBridge.exposeInMainWorld('pty', {
+  create: (opts) => ipcRenderer.invoke('pty:create', opts),
+  write: (id, data) => ipcRenderer.send('pty:write', { id, data }),
+  resize: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
+  kill: (id) => ipcRenderer.send('pty:kill', { id }),
+  onData: (cb) => ipcRenderer.on('pty:data', (_evt, payload) => cb(payload)),
+  onExit: (cb) => ipcRenderer.on('pty:exit', (_evt, payload) => cb(payload)),
+});
+
+contextBridge.exposeInMainWorld('platform', {
+  isMac: process.platform === 'darwin',
+  name: process.platform,
+});
+
+// Dynamically import xterm ESM and expose safely to the renderer
+(async () => {
+  try {
+    const xtermPath = path.join(__dirname, '..', 'node_modules', '@xterm', 'xterm', 'lib', 'xterm.js');
+    const xtermUrl = pathToFileURL(xtermPath).href;
+    const mod = await import(xtermUrl);
+    contextBridge.exposeInMainWorld('xterm', { Terminal: mod.Terminal });
+  } catch (e) {
+    // Expose a minimal marker so renderer can show a friendly message
+    contextBridge.exposeInMainWorld('xterm', null);
+    console.error('Failed to load xterm in preload:', e);
+  }
+})();

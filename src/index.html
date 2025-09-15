@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terminal Grid</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+  </head>
+  <body>
+    <div id="toolbar">
+      <button id="sshBtn" title="Open SSH prompt">🔌 SSH</button>
+      <span class="hint">Scroll left/right to add columns</span>
+    </div>
+    <div id="grid" class="grid"></div>
+
+    <button id="addLeftBtn" class="edge-btn left" title="Add column on the left">＋</button>
+    <button id="addRightBtn" class="edge-btn right" title="Add column on the right">＋</button>
+
+    <template id="column-template">
+      <div class="column">
+        <div class="pane top"><div class="term"></div></div>
+        <div class="pane bottom"><div class="term"></div></div>
+      </div>
+    </template>
+
+    <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="renderer.js"></script>
+  </body>
+  </html>
