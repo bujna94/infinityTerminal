@@ -114,8 +114,8 @@ body.minimap-open .grid { bottom: var(--overview-h); }
   inset: 0;
 }
 
-/* xterm tweaks for dark bg */
-.xterm .xterm-viewport { background-color: var(--bg); }
+/* xterm tweaks for dark bg; allow per-pane override via --term-bg */
+.xterm .xterm-viewport { background-color: var(--term-bg, var(--bg)); }
 .xterm .xterm-viewport { overflow-x: hidden; }
 
 /* Edge add buttons as thin columns inside the grid */
@@ -217,7 +217,7 @@ body.minimap-open .grid { bottom: var(--overview-h); }
   position: absolute;
   top: 4px; bottom: 4px;
   border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(18,22,34,0.9);
+  background: transparent; /* pane backgrounds show actual terminal bg */
   border-radius: 6px;
   overflow: hidden;
 }

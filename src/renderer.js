@@ -65,6 +65,57 @@ let _fastOffTimer = null;
 let _ovTimer = null; // overview refresh timer
 let _ovInvalidateTimer = null; // coalesced refresh timer
 
+// Host coloring for SSH sessions
+const DEFAULT_BG = '#0f1117';
+const hostColorMap = new Map(); // host -> color (hex)
+const usedColors = new Set();
+function hslToHex(h, s, l) {
+  // h in [0,360), s,l in [0,1]
+  s = Math.max(0, Math.min(1, s));
+  l = Math.max(0, Math.min(1, l));
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const hp = (h % 360) / 60;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (hp >= 0 && hp < 1) { r1 = c; g1 = x; }
+  else if (hp < 2) { r1 = x; g1 = c; }
+  else if (hp < 3) { g1 = c; b1 = x; }
+  else if (hp < 4) { g1 = x; b1 = c; }
+  else if (hp < 5) { r1 = x; b1 = c; }
+  else { r1 = c; b1 = x; }
+  const m = l - c / 2;
+  const r = Math.round((r1 + m) * 255);
+  const g = Math.round((g1 + m) * 255);
+  const b = Math.round((b1 + m) * 255);
+  const toHex = (n) => n.toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+function pickColorForHost(host) {
+  const key = String(host || '').trim().toLowerCase();
+  if (hostColorMap.has(key)) return hostColorMap.get(key);
+  // 32-bit FNV-1a hash for stable seed
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  // Map hash to hue, with good separation across the wheel
+  let hue = h % 360;
+  const saturation = 0.35; // keep dark but distinct
+  const lightness = 0.17;  // dark backgrounds for contrast with light fg
+  let color = hslToHex(hue, saturation, lightness);
+  // Avoid rare collisions by nudging hue until we hit an unused color
+  let tries = 0;
+  while (usedColors.has(color) && tries < 12) {
+    hue = (hue + 37) % 360; // add a prime-ish step
+    color = hslToHex(hue, saturation, lightness);
+    tries++;
+  }
+  usedColors.add(color);
+  hostColorMap.set(key, color);
+  return color;
+}
+
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
 let listenersInitialized = false;
 const dataHandlers = new Map();
@@ -142,6 +193,8 @@ function createTerminal(paneEl) {
   const id = makeId();
   const termEl = paneEl.querySelector('.term');
   term.open(termEl);
+  // Ensure initial per-pane CSS var is set to default bg
+  try { paneEl.style.setProperty('--term-bg', DEFAULT_BG); } catch (_) {}
 
   let disposed = false;
 
@@ -175,13 +228,124 @@ function createTerminal(paneEl) {
   ro.observe(paneEl);
 
   // Register handlers in maps; single global IPC listeners dispatch here
-  dataHandlers.set(id, (data) => { term.write(data); scheduleOverviewRefresh(); });
+  // Track SSH connection lifecycle to color backgrounds per host
+  let currentHost = null;      // active connected host
+  let pendingHost = null;      // host we are attempting to connect to
+  const FAIL_PATTERNS = [
+    /permission denied/i,
+    /could not resolve hostname/i,
+    /name or service not known/i,
+    /connection timed out/i,
+    /operation timed out/i,
+    /no route to host/i,
+    /connection refused/i,
+    /kex_exchange_identification/i,
+    /host key verification failed/i,
+    /too many authentication failures/i,
+    /ssh:\s*connect to host .* port .*:/i,
+  ];
+  const CLOSE_PATTERNS = [
+    /connection to .* closed/i,
+    /shared connection to .* closed/i,
+    /connection closed by remote host/i,
+    /connection reset by peer/i,
+    /^logout\b/i,
+  ];
+  const SUCCESS_PATTERNS = [
+    /last login/i,
+    /welcome to/i,
+  ];
+  function onConnected(host) {
+    currentHost = host;
+    pendingHost = null;
+    const color = pickColorForHost(host);
+    applyBackground(color);
+  }
+  function onDisconnected() {
+    currentHost = null;
+    pendingHost = null;
+    applyBackground(DEFAULT_BG);
+  }
+  dataHandlers.set(id, (data) => {
+    term.write(data);
+    try {
+      if (typeof data === 'string') {
+        const s = data;
+        // Failure while connecting
+        if (pendingHost && FAIL_PATTERNS.some(r => r.test(s))) {
+          pendingHost = null;
+          applyBackground(DEFAULT_BG);
+        }
+        // Connection closed
+        if (currentHost && CLOSE_PATTERNS.some(r => r.test(s))) {
+          onDisconnected();
+        }
+        // Success cues
+        if (pendingHost && SUCCESS_PATTERNS.some(r => r.test(s))) {
+          onConnected(pendingHost);
+        }
+      }
+    } catch (_) {}
+    scheduleOverviewRefresh();
+  });
   exitHandlers.set(id, (exitCode) => {
     term.write(`\r\n\x1b[31m[process exited with code ${exitCode}]\x1b[0m\r\n`);
   });
 
+  // Capture typed lines to detect ssh commands
+  let typedLine = '';
+  function parseSshHostFromCommand(cmd) {
+    const s = cmd.trim();
+    if (!s) return null;
+    const tokens = s.split(/\s+/);
+    if (!tokens.length || tokens[0] !== 'ssh') return null;
+    let host = null;
+    for (let i = 1; i < tokens.length; i++) {
+      const t = tokens[i];
+      if (t.startsWith('-')) {
+        if (t === '-p' && (i + 1) < tokens.length) { i++; continue; }
+        continue;
+      }
+      // Found the destination token
+      host = t.includes('@') ? t.split('@').pop() : t;
+      // Strip any trailing colon or path
+      host = host.replace(/:.*$/, '');
+      break;
+    }
+    return host || null;
+  }
+  function applyBackground(color) {
+    const theme = Object.assign({}, term.options?.theme || {}, { background: color });
+    try { term.setOption('theme', theme); } catch (_) { try { term.options.theme = theme; } catch (_) {} }
+    try { paneEl.style.setProperty('--term-bg', color); } catch (_) {}
+  }
   term.onData((data) => {
     pty.write(id, data);
+    // Build a simple editable command line buffer
+    try {
+      if (typeof data === 'string') {
+        for (let i = 0; i < data.length; i++) {
+          const ch = data[i];
+          if (ch === '\r' || ch === '\n') {
+            // Evaluate the command line
+            const host = parseSshHostFromCommand(typedLine);
+            if (host) {
+              // Begin connection attempt; apply color only after strict success
+              pendingHost = host;
+            }
+            typedLine = '';
+          } else if (ch === '\u0008' || ch === '\b' || ch === '\u007f') {
+            // backspace
+            typedLine = typedLine.slice(0, -1);
+          } else if (ch >= ' ' && ch <= '~') {
+            // printable
+            typedLine += ch;
+          } else {
+            // ignore other control codes
+          }
+        }
+      }
+    } catch (_) {}
     scheduleOverviewRefresh();
   });
 
@@ -691,8 +855,17 @@ function updateOverviewSnapshots() {
     const i = Number(el.dataset.index || '-1');
     if (!(i >= 0 && i < columns.length)) return;
     const col = columns[i];
-    const topCanvas = el.querySelector('.ov-pane.top canvas');
-    const botCanvas = el.querySelector('.ov-pane.bottom canvas');
+    const topPane = el.querySelector('.ov-pane.top');
+    const botPane = el.querySelector('.ov-pane.bottom');
+    const topCanvas = topPane && topPane.querySelector('canvas');
+    const botCanvas = botPane && botPane.querySelector('canvas');
+    // Sync pane backgrounds to terminal backgrounds
+    try {
+      const topBg = getPaneBgColor(columns[i]?.top?.pane) || DEFAULT_BG;
+      if (topPane) topPane.style.background = topBg;
+      const botBg = getPaneBgColor(columns[i]?.bottom?.pane) || DEFAULT_BG;
+      if (botPane) botPane.style.background = botBg;
+    } catch (_) {}
     function collectSourceCanvases(paneEl) {
       const termEl = paneEl?.querySelector('.term');
       if (!termEl) return [];
@@ -704,6 +877,19 @@ function updateOverviewSnapshots() {
     if (srcTop.length && topCanvas) compositeAndScale(srcTop, topCanvas); else if (topCanvas) drawTextMinimap(col?.top?.term, topCanvas);
     if (srcBot.length && botCanvas) compositeAndScale(srcBot, botCanvas); else if (botCanvas) drawTextMinimap(col?.bottom?.term, botCanvas);
   });
+}
+
+function getPaneBgColor(paneEl) {
+  try {
+    const inline = paneEl && paneEl.style && paneEl.style.getPropertyValue('--term-bg');
+    if (inline) return inline.trim();
+    const cs = paneEl ? window.getComputedStyle(paneEl) : null;
+    if (cs) {
+      const v = cs.getPropertyValue('--term-bg');
+      if (v && v.trim()) return v.trim();
+    }
+  } catch (_) {}
+  return DEFAULT_BG;
 }
 
 function compositeAndScale(srcCanvases, destCanvas) {
@@ -754,7 +940,10 @@ function drawTextMinimap(term, destCanvas) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = true;
     try { ctx.imageSmoothingQuality = 'high'; } catch (_) {}
-    ctx.fillStyle = '#0d1321';
+    // Match parent pane background color
+    let bg = '#0d1321';
+    try { const cs = window.getComputedStyle(d.parentElement); if (cs) bg = cs.backgroundColor || bg; } catch (_) {}
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, wCss, hCss);
     ctx.save();
     ctx.beginPath();
