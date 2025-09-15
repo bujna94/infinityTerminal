@@ -4,7 +4,6 @@ Overview
 - Fullscreen Electron app showing a grid of terminals: always 2 rows, unlimited columns.
 - Scroll horizontally with a trackpad (two-finger swipe) to navigate columns.
 - Each column holds two terminals (top and bottom). Start with 2 columns (4 terminals).
-- Spawn local shells or quickly connect via SSH.
 
 Prerequisites
 - macOS (works on Windows/Linux too).
@@ -24,12 +23,10 @@ Usage
     - Add Right: Cmd+Shift+Right (mac) or Ctrl+Shift+Right (win/linux)
   - ↺ Reset: recreate the original two columns (disposes current terminals and PTYs).
   - ＋ New Column: adds another pair of terminals.
-  - 🔌 SSH: prompts for "user@host" and connects the top terminal of the current/last column.
 - Scroll horizontally (two-finger swipe) to move across columns.
 - Each pane resizes automatically; scrollback defaults to 5,000 lines.
 
 Notes
-- SSH relies on the system `ssh` (macOS/Linux) or `ssh.exe` (Windows) available in PATH.
 - The app uses @xterm/xterm for terminal rendering and node-pty for pseudo-terminal processes.
 - Fit is implemented without @xterm/addon-fit to avoid peer/version issues.
 
@@ -37,7 +34,7 @@ Project Structure
 - electron/main.js: Electron app, PTY management, IPC.
 - electron/preload.js: secure bridge exposing PTY APIs to the renderer.
 - src/index.html, src/styles.css: UI and layout.
-- src/renderer.js: xterm.js setup, 2xN grid logic, SSH prompt.
+- src/renderer.js: xterm.js setup, 2xN grid logic.
 
 Customization
 - Change default number of initial columns in `src/renderer.js`.
@@ -45,5 +42,4 @@ Customization
 
 Troubleshooting
 - If terminals are blank, ensure node modules installed: `npm install`.
-- If SSH fails, check that `ssh` is available in your shell and host is reachable.
 - If Electron shows a native module mismatch for node-pty, run `npm run rebuild:pty` (it auto-detects your installed Electron version), then `npm start` again.

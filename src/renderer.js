@@ -3,7 +3,6 @@
 let TerminalCtor = (window.xterm && window.xterm.Terminal) || window.Terminal;
 
 const grid = document.getElementById('grid');
-const sshBtn = document.getElementById('sshBtn');
 const homeBtn = document.getElementById('homeBtn');
 const resetBtn = document.getElementById('resetBtn');
 const shortcutsBtn = document.getElementById('shortcutsBtn');
@@ -113,15 +112,6 @@ function waitForXterm(maxMs = 3000) {
   });
 }
 
-sshBtn.addEventListener('click', async () => {
-  const target = prompt('SSH target (e.g. user@host):');
-  if (!target) return;
-  const idx = currentRightVisibleIndex();
-  const index = idx != null ? idx : (columns.length ? columns.length - 1 : addColumnRight());
-  const col = columns[index];
-  await col.top.runSSH(target);
-  col.bottom.focus();
-});
 
 // Utility to create a terminal in a given pane element
 function makeId() {
@@ -197,14 +187,6 @@ function createTerminal(paneEl) {
     term.focus();
   }
 
-  async function runSSH(target) {
-    const isWin = (typeof process !== 'undefined' && process.platform === 'win32') || window.platform?.name === 'win32';
-    const sshCmd = isWin ? 'ssh.exe' : 'ssh';
-    await pty.create({ id, cmd: sshCmd, args: [target] });
-    fit();
-    term.focus();
-  }
-
   function focus() { term.focus(); }
 
   function dispose() {
@@ -216,7 +198,7 @@ function createTerminal(paneEl) {
     exitHandlers.delete(id);
   }
 
-  return { id, term, runLocalShell, runSSH, fit, focus, dispose };
+  return { id, term, runLocalShell, fit, focus, dispose };
 }
 
 function createColumnNode() {
