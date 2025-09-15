@@ -1,9 +1,10 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const path = require('path');
 const os = require('os');
 const pty = require('node-pty');
 
 const isMac = process.platform === 'darwin';
+let isQuitting = false;
 
 /** @type {Map<string, import('node-pty').IPty>} */
 const ptys = new Map();
@@ -12,12 +13,11 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    fullscreen: true,
-    simpleFullscreen: true,
     fullscreenable: true,
-    titleBarStyle: 'hiddenInset',
+    ...(isMac ? { titleBarStyle: 'hiddenInset', titleBarOverlay: { color: '#0f1117', symbolColor: '#e5e9f0', height: 42 } } : {}),
     icon: path.join(__dirname, '..', 'resources', 'appLogo.png'),
     webPreferences: {
+      // Match existing renderer code which uses both preload and fallback require
       contextIsolation: false,
       nodeIntegration: true,
       preload: path.join(__dirname, 'preload.js'),
@@ -26,19 +26,37 @@ function createWindow() {
 
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
 
+  // Notify renderer whether macOS traffic lights are visible (not in fullscreen)
+  const sendTrafficState = () => {
+    const visible = isMac && !win.isFullScreen();
+    try { win.webContents.send('window:traffic-visible', visible); } catch (_) {}
+  };
+  win.webContents.on('did-finish-load', sendTrafficState);
+  win.on('enter-full-screen', sendTrafficState);
+  win.on('leave-full-screen', sendTrafficState);
+
   // Optional: open devtools if needed
   // win.webContents.openDevTools({ mode: 'detach' });
-
-  // Ensure fullscreen after ready-to-show
-  win.once('ready-to-show', () => {
-    try { win.setFullScreen(true); } catch (_) {}
-  });
-  win.on('focus', () => {
-    try { if (!win.isFullScreen()) win.setFullScreen(true); } catch (_) {}
-  });
 }
 
 app.whenReady().then(() => {
+  if (isMac) {
+    try { app.setName('Infinity Terminal'); } catch (_) {}
+  }
+  // Ensure app menu with working Quit on macOS and other platforms
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'File',
+      submenu: [
+        ...(isMac ? [{ role: 'close' }] : [{ role: 'quit' }]),
+      ],
+    },
+    { role: 'windowMenu' },
+  ];
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+
   createWindow();
 
   app.on('activate', function () {
@@ -46,8 +64,25 @@ app.whenReady().then(() => {
   });
 });
 
+function killAllPtys() {
+  try {
+    for (const [id, proc] of ptys.entries()) {
+      try { proc.kill(); } catch (_) {}
+      ptys.delete(id);
+    }
+  } catch (_) {}
+}
+
 app.on('window-all-closed', function () {
+  // Clean up PTYs when no windows remain
+  killAllPtys();
   if (!isMac) app.quit();
+});
+
+// Ensure we terminate all child PTYs when quitting, so Quit actually exits
+app.on('before-quit', () => {
+  isQuitting = true;
+  killAllPtys();
 });
 
 // IPC: PTY lifecycle
@@ -76,12 +111,21 @@ ipcMain.handle('pty:create', (event, payload) => {
 
   ptys.set(id, proc);
 
+  const contents = event.sender;
+  const safeSend = (channel, payload) => {
+    if (isQuitting) return;
+    try {
+      if (!contents || contents.isDestroyed()) return;
+      contents.send(channel, payload);
+    } catch (_) {}
+  };
+
   proc.onData((data) => {
-    event.sender.send('pty:data', { id, data });
+    safeSend('pty:data', { id, data });
   });
 
   proc.onExit(({ exitCode, signal }) => {
-    event.sender.send('pty:exit', { id, exitCode, signal });
+    safeSend('pty:exit', { id, exitCode, signal });
     ptys.delete(id);
   });
 

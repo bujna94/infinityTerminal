@@ -25,12 +25,23 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px;
+  padding: 0 12px; /* default */
   background: rgba(15,17,23,0.8);
   -webkit-backdrop-filter: blur(6px);
   border-bottom: 1px solid rgba(255,255,255,0.06);
   z-index: 10;
+  /* Allow window drag when using hiddenInset title bar */
+  -webkit-app-region: drag;
 }
+
+/* Spacer for macOS traffic lights area */
+.traffic-spacer { flex: 0 0 0; width: 0; height: 100%; }
+body.is-mac.traffic-visible .traffic-spacer { flex-basis: 64px; width: 64px; }
+
+/* When traffic lights are visible on macOS, place brand on left and buttons on right */
+body.is-mac.traffic-visible #toolbar { justify-content: space-between; }
+body.is-mac.traffic-visible #toolbar .brand { order: 1; margin-left: 0; }
+body.is-mac.traffic-visible #toolbar .toolbar-actions { order: 2; margin-left: auto; }
 
 #toolbar button {
   height: 28px;
@@ -40,9 +51,11 @@ html, body {
   background: #161a24;
   color: var(--fg);
   cursor: pointer;
+  /* Interactive elements must be no-drag */
+  -webkit-app-region: no-drag;
 }
 #toolbar button:hover { border-color: var(--accent); }
-.hint { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.hint { color: var(--muted); font-size: 12px; margin-left: 6px; -webkit-app-region: no-drag; }
 .brand {
   margin-left: auto;
   font-weight: 700;
@@ -53,8 +66,13 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  -webkit-app-region: no-drag;
 }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* In windowed macOS, place brand left and buttons right */
+body.is-mac.traffic-visible #toolbar .brand { order: 1; margin-left: 0; }
+body.is-mac.traffic-visible #toolbar .toolbar-actions { order: 2; margin-left: auto; }
 
 .brand-logo {
   height: 18px;

@@ -496,6 +496,39 @@ function waitForPty(maxMs = 3000) {
 // Initialize with two columns (4 terminals)
 document.addEventListener('DOMContentLoaded', async () => {
   try {
+    const isMac = !!(window.platform && window.platform.isMac);
+    const spacer = document.getElementById('trafficSpacer');
+    const setSpacer = (visible) => {
+      if (!spacer) return;
+      if (visible) { spacer.style.width = '64px'; spacer.style.flexBasis = '64px'; }
+      else { spacer.style.width = '0px'; spacer.style.flexBasis = '0px'; }
+    };
+    if (isMac) {
+      document.body.classList.add('is-mac');
+      // Assume visible by default in windowed state
+      document.body.classList.add('traffic-visible');
+      setSpacer(true);
+    } else {
+      document.body.classList.remove('is-mac');
+      document.body.classList.remove('traffic-visible');
+      setSpacer(false);
+    }
+    // React to traffic-light visibility (macOS fullscreen hides them)
+    const applyTrafficClass = (visible) => {
+      if (visible) document.body.classList.add('traffic-visible');
+      else document.body.classList.remove('traffic-visible');
+      setSpacer(!!visible);
+    };
+    if (window.windowState && typeof window.windowState.onTrafficVisible === 'function') {
+      window.windowState.onTrafficVisible(applyTrafficClass);
+    } else {
+      try {
+        const { ipcRenderer } = require('electron');
+        ipcRenderer.on('window:traffic-visible', (_evt, v) => applyTrafficClass(!!v));
+      } catch (_) {}
+    }
+  } catch (_) {}
+  try {
     await waitForPty(4000);
   } catch (e) {
     ensureBridge();

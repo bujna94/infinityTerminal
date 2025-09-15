@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('platform', {
   name: process.platform,
 });
 
+// Window state/Chrome hints
+contextBridge.exposeInMainWorld('windowState', {
+  onTrafficVisible: (cb) => ipcRenderer.on('window:traffic-visible', (_evt, visible) => {
+    try { cb(!!visible); } catch (_) {}
+  }),
+});
+
 // Dynamically import xterm ESM and expose safely to the renderer
 (async () => {
   try {
