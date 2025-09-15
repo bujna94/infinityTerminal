@@ -36,7 +36,7 @@ html, body {
 
 /* Spacer for macOS traffic lights area */
 .traffic-spacer { flex: 0 0 0; width: 0; height: 100%; }
-body.is-mac.traffic-visible .traffic-spacer { flex-basis: 66px; width: 66px; }
+body.is-mac.traffic-visible .traffic-spacer { flex-basis: 65px; width: 65px; }
 
 /* When traffic lights are visible on macOS, place brand on left and buttons on right */
 body.is-mac.traffic-visible #toolbar { justify-content: space-between; }

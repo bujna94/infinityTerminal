@@ -500,7 +500,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const spacer = document.getElementById('trafficSpacer');
     const setSpacer = (visible) => {
       if (!spacer) return;
-      if (visible) { spacer.style.width = '66px'; spacer.style.flexBasis = '66px'; }
+      if (visible) { spacer.style.width = '65px'; spacer.style.flexBasis = '65px'; }
       else { spacer.style.width = '0px'; spacer.style.flexBasis = '0px'; }
     };
     if (isMac) {
