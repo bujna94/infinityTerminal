@@ -372,6 +372,7 @@ function resetToHome(scrollToStart = false) {
     if (addLeftCombo) {
       e.preventDefault();
       addColumnLeft();
+      hideLeftEdge(false);
       return;
     }
     if (addRightCombo) {
@@ -394,6 +395,16 @@ function hideRightEdge(smooth = false) {
   const behavior = smooth ? 'smooth' : 'auto';
   const rightEdge = (rightEdgeEl?.offsetWidth || 0);
   const target = Math.max(0, grid.scrollWidth - grid.clientWidth - rightEdge);
+  _programmaticScroll = true;
+  try { grid.scrollTo({ left: target, behavior }); } catch (_) { grid.scrollLeft = target; }
+  setTimeout(() => { _programmaticScroll = false; updateEdgeSnapState(); }, 120);
+  updateEdgeSnapState();
+}
+
+function hideLeftEdge(smooth = false) {
+  const behavior = smooth ? 'smooth' : 'auto';
+  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
+  const target = Math.max(0, leftEdge);
   _programmaticScroll = true;
   try { grid.scrollTo({ left: target, behavior }); } catch (_) { grid.scrollLeft = target; }
   setTimeout(() => { _programmaticScroll = false; updateEdgeSnapState(); }, 120);
