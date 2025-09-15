@@ -39,7 +39,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "resources/appLogo.icns",
+      "icon": "resources/appLogoSmaller.icns",
       "asarUnpack": [
         "**/*.node",
         "node_modules/node-pty/**"
