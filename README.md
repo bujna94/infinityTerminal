@@ -19,6 +19,9 @@ Install
 Usage
 - App launches fullscreen; toolbar at top:
   - 🏠 Home: scroll to the original two columns (keeps all terminals). Shortcut: Cmd+Shift+H (mac) or Ctrl+Shift+H (win/linux).
+  - ⬅️/➡️ Add Column: keyboard shortcuts to add columns without clicking:
+    - Add Left: Cmd+Shift+Left (mac) or Ctrl+Shift+Left (win/linux)
+    - Add Right: Cmd+Shift+Right (mac) or Ctrl+Shift+Right (win/linux)
   - ↺ Reset: recreate the original two columns (disposes current terminals and PTYs).
   - ＋ New Column: adds another pair of terminals.
   - 🔌 SSH: prompts for "user@host" and connects the top terminal of the current/last column.

@@ -365,9 +365,25 @@ function resetToHome(scrollToStart = false) {
       t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable === true
     ));
     if (inEditable) return; // allow global shortcuts when focused in xterm's helper textarea
+    // Add Column shortcuts
+    const mod = isMac ? e.metaKey : e.ctrlKey;
+    const addLeftCombo = mod && e.shiftKey && e.key === 'ArrowLeft';
+    const addRightCombo = mod && e.shiftKey && e.key === 'ArrowRight';
+    if (addLeftCombo) {
+      e.preventDefault();
+      addColumnLeft();
+      return;
+    }
+    if (addRightCombo) {
+      e.preventDefault();
+      addColumnRight(true);
+      hideRightEdge(false);
+      return;
+    }
+    // Home shortcut
     const hKey = e.key === 'h' || e.key === 'H';
-    const combo = isMac ? (e.metaKey && e.shiftKey && hKey) : (e.ctrlKey && e.shiftKey && hKey);
-    if (combo) {
+    const homeCombo = isMac ? (e.metaKey && e.shiftKey && hKey) : (e.ctrlKey && e.shiftKey && hKey);
+    if (homeCombo) {
       e.preventDefault();
       scrollHome(true);
     }
