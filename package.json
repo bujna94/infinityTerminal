@@ -43,7 +43,13 @@
       "asarUnpack": [
         "**/*.node",
         "node_modules/node-pty/**"
-      ]
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "This app needs to control other applications for terminal functionality.",
+        "NSMicrophoneUsageDescription": "This app does not use the microphone."
+      }
     },
     "dmg": {
       "backgroundColor": "#0f1117",
