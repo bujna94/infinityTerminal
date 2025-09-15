@@ -157,6 +157,22 @@ body.minimap-open .grid { bottom: var(--overview-h); }
   display: none;
 }
 .minimap-open .overview { display: block; }
+.overview-resizer {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 2;
+}
+.overview-resizer::after {
+  content: '';
+  position: absolute;
+  left: 50%; transform: translateX(-50%);
+  top: 2px;
+  width: 36px; height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.18);
+}
 .overview-track {
   position: absolute;
   inset: 0 8px 0 8px;

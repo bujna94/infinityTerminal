@@ -529,6 +529,7 @@ function scrollByColumns(delta) {
 const overview = document.getElementById('overview');
 const ovTrack = document.getElementById('overviewTrack');
 const ovViewport = document.getElementById('overviewViewport');
+const ovResizer = document.getElementById('overviewResizer');
 
 function isMinimapOpen() {
   try { return document.body.classList.contains('minimap-open'); } catch (_) { return false; }
@@ -543,6 +544,46 @@ function closeMinimap() {
   stopOverviewLoop();
 }
 function toggleMinimap() { if (isMinimapOpen()) closeMinimap(); else openMinimap(); }
+
+// Minimap vertical resize handling
+let _ovResizeActive = false;
+let _ovResizePendingH = null;
+let _ovResizeRAF = null;
+function setMinimapHeight(px) {
+  const h = Math.round(px);
+  document.documentElement.style.setProperty('--overview-h', h + 'px');
+  try { updateOverviewViewport(); updateOverviewSnapshots(); } catch (_) {}
+}
+function startResizeAt(clientY) {
+  _ovResizeActive = true;
+  document.body.style.cursor = 'ns-resize';
+}
+function onResizeMove(clientY) {
+  if (!_ovResizeActive) return;
+  const winH = window.innerHeight || document.documentElement.clientHeight;
+  let newH = Math.max(40, Math.min(Math.floor(winH * 0.66), Math.floor(winH - clientY))); // clamp 40px..66% of window
+  _ovResizePendingH = newH;
+  if (_ovResizeRAF) return;
+  _ovResizeRAF = requestAnimationFrame(() => {
+    _ovResizeRAF = null;
+    if (_ovResizePendingH != null) setMinimapHeight(_ovResizePendingH);
+    _ovResizePendingH = null;
+  });
+}
+function endResize() {
+  if (!_ovResizeActive) return;
+  _ovResizeActive = false;
+  document.body.style.cursor = '';
+}
+if (ovResizer) {
+  ovResizer.addEventListener('mousedown', (e) => { e.preventDefault(); startResizeAt(e.clientY); });
+  window.addEventListener('mousemove', (e) => { if (_ovResizeActive) onResizeMove(e.clientY); });
+  window.addEventListener('mouseup', endResize);
+  // Touch support
+  ovResizer.addEventListener('touchstart', (e) => { const t = e.touches && e.touches[0]; if (!t) return; e.preventDefault(); startResizeAt(t.clientY); }, { passive: false });
+  window.addEventListener('touchmove', (e) => { if (!_ovResizeActive) return; const t = e.touches && e.touches[0]; if (!t) return; onResizeMove(t.clientY); }, { passive: false });
+  window.addEventListener('touchend', endResize);
+}
 
 function renderOverview() {
   if (!ovTrack) return;
