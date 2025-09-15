@@ -197,6 +197,8 @@ function createTerminal(paneEl) {
   try { paneEl.style.setProperty('--term-bg', DEFAULT_BG); } catch (_) {}
 
   let disposed = false;
+  let exited = false;
+  let overlayEl = null;
 
   function measureCharSize(el) {
     // Create an offscreen measurer to estimate char cell size
@@ -290,6 +292,11 @@ function createTerminal(paneEl) {
   });
   exitHandlers.set(id, (exitCode) => {
     term.write(`\r\n\x1b[31m[process exited with code ${exitCode}]\x1b[0m\r\n`);
+    exited = true;
+    // Reset to local style
+    try { applyBackground(DEFAULT_BG); currentHost = null; pendingHost = null; } catch (_) {}
+    scheduleOverviewRefresh();
+    showRestartOverlay(`Process exited (${exitCode}). Press Enter to restart.`);
   });
 
   // Capture typed lines to detect ssh commands
@@ -320,6 +327,19 @@ function createTerminal(paneEl) {
     try { paneEl.style.setProperty('--term-bg', color); } catch (_) {}
   }
   term.onData((data) => {
+    if (exited) {
+      // Wait for Enter to restart a local shell in this pane
+      if (typeof data === 'string' && (data.includes('\r') || data.includes('\n'))) {
+        hideRestartOverlay();
+        exited = false;
+        typedLine = '';
+        pendingHost = null;
+        currentHost = null;
+        applyBackground(DEFAULT_BG);
+        runLocalShell();
+      }
+      return; // swallow keystrokes while exited
+    }
     pty.write(id, data);
     // Build a simple editable command line buffer
     try {
@@ -371,6 +391,39 @@ function createTerminal(paneEl) {
     dataHandlers.delete(id);
     exitHandlers.delete(id);
   }
+
+  function showRestartOverlay(msg) {
+    try { hideRestartOverlay(); } catch (_) {}
+    const ov = document.createElement('div');
+    ov.textContent = msg || 'Process exited. Press Enter to restart.';
+    ov.style.position = 'absolute';
+    ov.style.inset = '0';
+    ov.style.display = 'flex';
+    ov.style.alignItems = 'center';
+    ov.style.justifyContent = 'center';
+    ov.style.background = 'rgba(0,0,0,0.35)';
+    ov.style.color = '#e5e9f0';
+    ov.style.fontSize = '13px';
+    ov.style.zIndex = '2';
+    ov.style.pointerEvents = 'none';
+    paneEl.appendChild(ov);
+    overlayEl = ov;
+  }
+  function hideRestartOverlay() {
+    if (overlayEl && overlayEl.parentElement) overlayEl.parentElement.removeChild(overlayEl);
+    overlayEl = null;
+  }
+  // Click to restart when exited
+  paneEl.addEventListener('click', () => {
+    if (!exited) return;
+    hideRestartOverlay();
+    exited = false;
+    typedLine = '';
+    pendingHost = null;
+    currentHost = null;
+    applyBackground(DEFAULT_BG);
+    runLocalShell();
+  });
 
   return { id, term, runLocalShell, fit, focus, dispose, pane: paneEl };
 }
