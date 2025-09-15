@@ -4,8 +4,10 @@ let TerminalCtor = (window.xterm && window.xterm.Terminal) || window.Terminal;
 
 const grid = document.getElementById('grid');
 const sshBtn = document.getElementById('sshBtn');
-const addLeftBtn = document.getElementById('addLeftBtn');
-const addRightBtn = document.getElementById('addRightBtn');
+const leftEdgeEl = document.querySelector('.edge-cell.left');
+const rightEdgeEl = document.querySelector('.edge-cell.right');
+const addLeftBtn = document.getElementById('addLeftCell');
+const addRightBtn = document.getElementById('addRightCell');
 
 let pty = null;
 try {
@@ -199,7 +201,7 @@ function createColumnNode() {
 
 function addColumnRight(scrollIntoView = false) {
   const { node, top, bottom } = createColumnNode();
-  grid.appendChild(node);
+  grid.insertBefore(node, rightEdgeEl);
   const index = columns.push({ top, bottom, el: node }) - 1;
   if (scrollIntoView) node.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' });
   return index;
@@ -207,8 +209,7 @@ function addColumnRight(scrollIntoView = false) {
 
 function addColumnLeft() {
   const { node, top, bottom } = createColumnNode();
-  const first = grid.firstChild;
-  grid.insertBefore(node, first);
+  grid.insertBefore(node, leftEdgeEl.nextSibling);
   // Keep viewport stable after prepending
   const w = node.offsetWidth || Math.floor(grid.clientWidth / 2);
   grid.scrollLeft += w;
@@ -224,20 +225,14 @@ function columnWidth() {
 function currentRightVisibleIndex() {
   const w = columnWidth();
   if (!w) return null;
-  const offset = (addLeftBtn && addLeftBtn.offsetWidth) || 0;
+  const offset = (leftEdgeEl && leftEdgeEl.offsetWidth) || 0;
   const start = Math.floor(Math.max(0, grid.scrollLeft - offset) / w);
   const perView = Math.max(1, Math.round(grid.clientWidth / w));
   const right = Math.min(columns.length - 1, start + perView - 1);
   return isFinite(right) ? right : null;
 }
 
-function updateEdgeButtons() {
-  const threshold = 16;
-  const atLeft = grid.scrollLeft <= threshold;
-  const atRight = grid.scrollLeft + grid.clientWidth >= grid.scrollWidth - threshold;
-  addLeftBtn.style.display = atLeft ? 'flex' : 'none';
-  addRightBtn.style.display = atRight ? 'flex' : 'none';
-}
+function updateEdgeCellsVisibility() { /* no-op: edges always visible */ }
 
 function waitForPty(maxMs = 3000) {
   return new Promise((resolve, reject) => {
@@ -267,12 +262,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Seed with two visible columns (four terminals)
     addColumnRight(false);
     addColumnRight(false);
-    // Overlay edge buttons visibility and handlers
-    grid.addEventListener('scroll', updateEdgeButtons, { passive: true });
-    window.addEventListener('resize', updateEdgeButtons);
-    updateEdgeButtons();
-    addLeftBtn.addEventListener('click', () => { addColumnLeft(); updateEdgeButtons(); });
-    addRightBtn.addEventListener('click', () => { addColumnRight(true); updateEdgeButtons(); });
+    // Edge cell buttons
+    addLeftBtn.addEventListener('click', () => { addColumnLeft(); });
+    addRightBtn.addEventListener('click', () => { addColumnRight(true); });
     initIpcDispatch();
   } catch (e) {
     console.error('Failed to initialize xterm:', e);

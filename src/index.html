@@ -12,10 +12,10 @@
       <button id="sshBtn" title="Open SSH prompt">🔌 SSH</button>
       <span class="hint">Scroll left/right to add columns</span>
     </div>
-    <div id="grid" class="grid"></div>
-
-    <button id="addLeftBtn" class="edge-btn left" title="Add column on the left">＋</button>
-    <button id="addRightBtn" class="edge-btn right" title="Add column on the right">＋</button>
+    <div id="grid" class="grid">
+      <div class="edge-cell left"><button id="addLeftCell" class="edge-btn-cell" title="Add column on the left">＋</button></div>
+      <div class="edge-cell right"><button id="addRightCell" class="edge-btn-cell" title="Add column on the right">＋</button></div>
+    </div>
 
     <template id="column-template">
       <div class="column">

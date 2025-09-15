@@ -3,6 +3,7 @@
   --fg: #e5e9f0;
   --accent: #4f73ff;
   --muted: #7a8393;
+  --edge: 28px;
 }
 
 * { box-sizing: border-box; }
@@ -52,8 +53,8 @@ html, body {
 }
 
 .column {
-  width: 50vw; /* two columns visible per viewport */
-  min-width: 50vw;
+  width: calc((100vw - (2 * var(--edge))) / 2); /* two columns + both edges visible */
+  min-width: calc((100vw - (2 * var(--edge))) / 2);
   flex: 0 0 auto;
   display: grid;
   grid-template-rows: 1fr 1fr; /* two rows */
@@ -76,22 +77,24 @@ html, body {
 /* xterm tweaks for dark bg */
 .xterm .xterm-viewport { background-color: var(--bg); }
 
-/* Edge add buttons (overlay) */
-.edge-btn {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 32px; height: 32px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.2);
-  background: rgba(20,24,32,0.85);
+/* Edge add buttons as thin columns inside the grid */
+.edge-cell {
+  flex: 0 0 var(--edge);
+  width: var(--edge);
+  min-width: var(--edge);
+  background: rgba(22,26,36,0.9);
   color: var(--fg);
-  z-index: 20;
-  display: none;
+  display: flex; /* always visible */
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  user-select: none;
 }
-.edge-btn.left { left: 6px; }
-.edge-btn.right { right: 6px; }
-.edge-btn:hover { border-color: var(--accent); }
+.edge-cell.left { border-right: 1px solid rgba(255,255,255,0.06); }
+.edge-cell.right { border-left: 1px solid rgba(255,255,255,0.06); }
+.edge-btn-cell {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--fg);
+  font-size: 18px; cursor: pointer;
+}
+.edge-btn-cell:hover { background: rgba(30,36,48,0.95); }
