@@ -402,14 +402,7 @@ function resetToHome(scrollToStart = false) {
       hideRightEdge(false);
       return;
     }
-    // Move by one column with Shift + Arrow keys (no Cmd/Ctrl)
-    const shiftOnly = e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey;
-    if (shiftOnly && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-      e.preventDefault();
-      const delta = (e.key === 'ArrowRight') ? 1 : -1;
-      scrollByColumns(delta);
-      return;
-    }
+    // Shift+Arrow: no-op (reserved for selection). Navigation uses Option+Command+Arrow on macOS.
 
     // macOS: Option+Command+Left/Right navigation
     if (isMac && e.metaKey && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
