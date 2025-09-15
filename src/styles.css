@@ -40,6 +40,15 @@ html, body {
 }
 #toolbar button:hover { border-color: var(--accent); }
 .hint { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.brand {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--fg);
+  opacity: 0.95;
+  white-space: nowrap;
+}
+.toolbar-actions { display: flex; align-items: center; gap: 8px; }
 
 .grid {
   position: absolute;

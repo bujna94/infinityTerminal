@@ -9,11 +9,14 @@
   </head>
   <body>
     <div id="toolbar">
-      <button id="homeBtn" title="Go to Home (first 2 columns)">🏠 Home</button>
-      <button id="sshBtn" title="Open SSH prompt">🔌 SSH</button>
-      <button id="resetBtn" title="Recreate original 2 columns (Reset)">↺ Reset</button>
-      <button id="shortcutsBtn" title="Show keyboard shortcuts">⌨️ Shortcuts</button>
-      <span class="hint">Scroll left/right to add columns</span>
+      <div class="toolbar-actions">
+        <button id="homeBtn" title="Go to Home (first 2 columns)">🏠 Home</button>
+        <button id="sshBtn" title="Open SSH prompt">🔌 SSH</button>
+        <button id="resetBtn" title="Recreate original 2 columns (Reset)">↺ Reset</button>
+        <button id="shortcutsBtn" title="Show keyboard shortcuts">⌨️ Shortcuts</button>
+        <span class="hint">Scroll left/right to add columns</span>
+      </div>
+      <span class="brand">∞ Infinity Terminal</span>
     </div>
     <div id="grid" class="grid">
       <div class="edge-cell left"><button id="addLeftCell" class="edge-btn-cell" title="Add column on the left">＋</button></div>
