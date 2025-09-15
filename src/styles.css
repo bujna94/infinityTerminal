@@ -4,6 +4,7 @@
   --accent: #4f73ff;
   --muted: #7a8393;
   --edge: 28px;
+  --overview-h: 34px;
 }
 
 * { box-sizing: border-box; }
@@ -141,3 +142,5 @@ html, body {
 .shortcut-list li { margin: 8px 0; }
 .key { display: inline-block; min-width: 16px; padding: 2px 6px; margin: 0 2px; border-radius: 6px; background: #0f1117; border: 1px solid rgba(255,255,255,0.12); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
 .modal-hint { margin-top: 8px; color: var(--muted); font-size: 12px; }
+
+/* Overview removed */

@@ -6,6 +6,7 @@ const grid = document.getElementById('grid');
 const homeBtn = document.getElementById('homeBtn');
 const resetBtn = document.getElementById('resetBtn');
 const shortcutsBtn = document.getElementById('shortcutsBtn');
+// overview removed
 const shortcutsModal = document.getElementById('shortcutsModal');
 const shortcutsOverlay = document.getElementById('shortcutsOverlay');
 const shortcutsClose = document.getElementById('shortcutsClose');
@@ -60,6 +61,7 @@ let _holdStartTs = 0;
 let _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 let _fastScrolling = false;
 let _fastOffTimer = null;
+let _ovTimer = null; // overview refresh timer
 
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
 let listenersInitialized = false;
@@ -127,6 +129,7 @@ function createTerminal(paneEl) {
     scrollback: 5000,
     fontSize: 13,
     fontFamily: 'Menlo, Monaco, Consolas, monospace',
+    rendererType: 'canvas',
     theme: {
       background: '#0f1117'
     },
@@ -198,7 +201,7 @@ function createTerminal(paneEl) {
     exitHandlers.delete(id);
   }
 
-  return { id, term, runLocalShell, fit, focus, dispose };
+  return { id, term, runLocalShell, fit, focus, dispose, pane: paneEl };
 }
 
 function createColumnNode() {
@@ -282,16 +285,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
     } catch (_) {}
     updateEdgeSnapState();
+    // Overview removed
     // Edge cell buttons
     addLeftBtn.addEventListener('click', () => {
       // Add to the left and keep the + off-screen after creation
       addColumnLeft();
+      
       updateEdgeSnapState();
     });
     addRightBtn.addEventListener('click', () => {
       // Add to the right, then ensure the right + hides just outside the last column
       addColumnRight(true);
       hideRightEdge(false);
+      
       updateEdgeSnapState();
     });
     // Toolbar Home button
@@ -302,6 +308,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (shortcutsOverlay) shortcutsOverlay.addEventListener('click', closeShortcuts);
     if (shortcutsClose) shortcutsClose.addEventListener('click', closeShortcuts);
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShortcuts(); }, { capture: true });
+    // Overview button removed
     initIpcDispatch();
   } catch (e) {
     console.error('Failed to initialize xterm:', e);
@@ -378,6 +385,9 @@ function resetToHome(scrollToStart = false) {
       if (isShortcutsOpen()) closeShortcuts(); else openShortcuts();
       return;
     }
+
+    // Toggle Overview popup: Cmd/Ctrl + Shift + V
+    // Overview shortcut removed
 
     // Add Column shortcuts
     const mod = isMac ? e.metaKey : e.ctrlKey;
@@ -493,6 +503,173 @@ function scrollByColumns(delta) {
   setTimeout(() => { _programmaticScroll = false; _lastScrollLeft = grid.scrollLeft; }, 160);
 }
 
+// Overview strip support
+const overview = document.getElementById('overview');
+const ovTrack = document.getElementById('overviewTrack');
+const ovViewport = document.getElementById('overviewViewport');
+
+function renderOverview() {
+  if (!ovTrack) return;
+  // Preserve viewport handle while rebuilding
+  const vp = ovViewport && ovViewport.parentElement === ovTrack ? ovViewport : null;
+  if (vp) ovTrack.removeChild(vp);
+  while (ovTrack.firstChild) ovTrack.removeChild(ovTrack.firstChild);
+  const n = columns.length;
+  if (!n) return;
+  const trackW = ovTrack.clientWidth || ovTrack.offsetWidth || 1;
+  // Use actual DOM widths to layout columns proportionally
+  const widths = columns.map(c => Math.max(1, c?.el?.offsetWidth || 0));
+  const totalW = widths.reduce((a,b)=>a+b,0) || 1;
+  let acc = 0;
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div');
+    el.className = 'ov-col';
+    el.dataset.index = String(i);
+    const leftPx = Math.round((acc / totalW) * trackW);
+    const widthPx = Math.max(2, Math.round((widths[i] / totalW) * trackW));
+    el.style.left = leftPx + 'px';
+    el.style.width = widthPx + 'px';
+    // Two tiny panes with canvases to show real snapshots
+    const pTop = document.createElement('div');
+    pTop.className = 'ov-pane top';
+    const cTop = document.createElement('canvas');
+    cTop.className = 'ov-canvas';
+    pTop.appendChild(cTop);
+    const pBottom = document.createElement('div');
+    pBottom.className = 'ov-pane bottom';
+    const cBot = document.createElement('canvas');
+    cBot.className = 'ov-canvas';
+    pBottom.appendChild(cBot);
+    el.appendChild(pTop);
+    el.appendChild(pBottom);
+    ovTrack.appendChild(el);
+    acc += widths[i];
+  }
+  // Ensure viewport handle sits on top visually
+  if (ovViewport) ovTrack.appendChild(ovViewport);
+}
+
+function updateOverviewViewport() {
+  if (!ovTrack || !ovViewport || !overview) return;
+  const trackRect = ovTrack.getBoundingClientRect();
+  let trackW = Math.max(0, trackRect.width);
+  if (trackW === 0) { // overlay just opened; retry next frame
+    requestAnimationFrame(updateOverviewViewport);
+    return;
+  }
+  const total = Math.max(1, grid.scrollWidth);
+  const visible = Math.max(1, grid.clientWidth);
+  const left = Math.max(0, Math.min(grid.scrollLeft, total - visible));
+  const vpLeft = (left / total) * trackW;
+  const vpW = Math.max(24, (visible / total) * trackW);
+  ovViewport.style.left = Math.round(vpLeft) + 'px';
+  ovViewport.style.width = Math.round(vpW) + 'px';
+}
+
+function initOverviewInteractions() {
+  if (!ovTrack || !overview) return;
+  let dragging = false;
+  function toTrackX(clientX) {
+    const r = ovTrack.getBoundingClientRect();
+    return Math.max(0, Math.min(clientX - r.left, r.width));
+  }
+  function scrollToTrackPos(trackX) {
+    const total = Math.max(1, grid.scrollWidth);
+    const visible = Math.max(1, grid.clientWidth);
+    const trackW = Math.max(1, ovTrack.getBoundingClientRect().width);
+    const desiredLeft = (trackX / trackW) * total - (visible / 2);
+    const maxLeft = Math.max(0, total - visible);
+    const target = Math.max(0, Math.min(desiredLeft, maxLeft));
+    _programmaticScroll = true;
+    try { grid.scrollTo({ left: target, behavior: 'auto' }); } catch (_) { grid.scrollLeft = target; }
+    _programmaticScroll = false;
+    _lastScrollLeft = grid.scrollLeft;
+    updateOverviewViewport();
+  }
+  ovTrack.addEventListener('mousedown', (e) => {
+    dragging = true;
+    document.body.style.cursor = 'grabbing';
+    scrollToTrackPos(toTrackX(e.clientX));
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    scrollToTrackPos(toTrackX(e.clientX));
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = '';
+  });
+}
+
+function startOverviewLoop() { if (_ovTimer) return; _ovTimer = setInterval(() => { if (overview && !overview.classList.contains('hidden')) { updateOverviewViewport(); updateOverviewSnapshots(); } }, 120); }
+
+function stopOverviewLoop() { if (_ovTimer) { clearInterval(_ovTimer); _ovTimer = null; } }
+
+// obsolete functions removed: renderOverview/updateOverviewViewport/updateOverviewSnapshots
+
+function compositeAndScale(srcCanvases, destCanvas) {
+  try {
+    const d = destCanvas;
+    const rect = d.getBoundingClientRect();
+    const w = Math.max(2, Math.floor(rect.width));
+    const h = Math.max(2, Math.floor(rect.height));
+    if (d.width !== w) d.width = w;
+    if (d.height !== h) d.height = h;
+    const ctx = d.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = false;
+    // Composite all source canvases onto an offscreen canvas at source resolution
+    let sw = 0, sh = 0;
+    srcCanvases.forEach(c => { sw = Math.max(sw, c.width || c.getBoundingClientRect().width); sh = Math.max(sh, c.height || c.getBoundingClientRect().height); });
+    sw = Math.max(1, sw); sh = Math.max(1, sh);
+    const off = document.createElement('canvas'); off.width = sw; off.height = sh;
+    const offctx = off.getContext('2d'); if (!offctx) return;
+    offctx.imageSmoothingEnabled = false;
+    offctx.clearRect(0, 0, sw, sh);
+    srcCanvases.forEach(c => { if (c.width && c.height) offctx.drawImage(c, 0, 0); });
+    // Now scale composite
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(off, 0, 0, sw, sh, 0, 0, w, h);
+  } catch (_) { /* ignore */ }
+}
+
+function drawTextMinimap(term, destCanvas) {
+  if (!term || !destCanvas) return;
+  try {
+    const d = destCanvas;
+    const rect = d.getBoundingClientRect();
+    const w = Math.max(30, Math.floor(rect.width));
+    const h = Math.max(14, Math.floor(rect.height));
+    if (d.width !== w) d.width = w;
+    if (d.height !== h) d.height = h;
+    const ctx = d.getContext('2d'); if (!ctx) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#0d1321';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#9fb3ff';
+    const rows = Math.max(6, Math.floor(h / 6));
+    const lineH = h / rows;
+    const buf = term.buffer?.active;
+    const total = buf?.length || term.rows || 24;
+    const baseY = buf?.baseY || 0;
+    // Sample last N lines from the buffer
+    for (let r = 0; r < rows; r++) {
+      const y = Math.max(0, baseY - rows + 1 + r);
+      let text = '';
+      try { text = buf?.getLine ? (buf.getLine(y)?.translateToString(true) || '') : ''; } catch (_) { text = ''; }
+      // Truncate text to fit roughly
+      if (text) {
+        const yPix = Math.floor(r * lineH);
+        ctx.font = '6px Menlo, Monaco, Consolas, monospace';
+        ctx.textBaseline = 'top';
+        const maxChars = Math.max(5, Math.floor(w / 3));
+        ctx.fillText(text.slice(0, maxChars), 2, yPix);
+      }
+    }
+  } catch (_) { /* ignore */ }
+}
+
 // Toggle scroll snapping near edges so + buttons can remain visible once revealed
 function updateEdgeSnapState() { /* stickiness disabled */ }
 
@@ -500,8 +677,9 @@ function updateEdgeSnapState() { /* stickiness disabled */ }
 grid.addEventListener('scroll', () => {
   updateEdgeSnapState();
   if (_programmaticScroll) { _lastScrollLeft = grid.scrollLeft; return; }
-  // Stickiness disabled: only track and exit
-  _lastScrollLeft = grid.scrollLeft; return;
+  // Stickiness disabled
+  _lastScrollLeft = grid.scrollLeft;
+  return;
 
   const leftEdge = (leftEdgeEl?.offsetWidth || 0);
   const rightEdge = (rightEdgeEl?.offsetWidth || 0);
@@ -543,3 +721,4 @@ grid.addEventListener('scroll', () => {
     return;
   }
 });
+// Overview removed
