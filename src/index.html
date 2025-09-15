@@ -12,6 +12,7 @@
       <button id="homeBtn" title="Go to Home (first 2 columns)">🏠 Home</button>
       <button id="sshBtn" title="Open SSH prompt">🔌 SSH</button>
       <button id="resetBtn" title="Recreate original 2 columns (Reset)">↺ Reset</button>
+      <button id="shortcutsBtn" title="Show keyboard shortcuts">⌨️ Shortcuts</button>
       <span class="hint">Scroll left/right to add columns</span>
     </div>
     <div id="grid" class="grid">
@@ -25,6 +26,23 @@
         <div class="pane bottom"><div class="term"></div></div>
       </div>
     </template>
+
+    <!-- Shortcuts Modal -->
+    <div id="shortcutsOverlay" class="modal-overlay hidden"></div>
+    <div id="shortcutsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+      <div class="modal-header">
+        <h2 id="shortcutsTitle">Keyboard Shortcuts</h2>
+        <button id="shortcutsClose" class="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <ul class="shortcut-list">
+          <li><span class="key">Cmd/Ctrl</span> + <span class="key">Shift</span> + <span class="key">H</span> — Home (scroll to first two columns)</li>
+          <li><span class="key">Cmd/Ctrl</span> + <span class="key">Shift</span> + <span class="key">←</span> — Add column to the left</li>
+          <li><span class="key">Cmd/Ctrl</span> + <span class="key">Shift</span> + <span class="key">→</span> — Add column to the right</li>
+        </ul>
+        <div class="modal-hint">Press Esc to close</div>
+      </div>
+    </div>
 
     <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="renderer.js"></script>

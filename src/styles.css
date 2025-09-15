@@ -103,3 +103,29 @@ html, body {
   font-size: 18px; cursor: pointer;
 }
 .edge-btn-cell:hover { background: rgba(30,36,48,0.95); }
+
+/* Modal (Shortcuts) */
+.hidden { display: none !important; }
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 30;
+}
+.modal {
+  position: fixed;
+  top: 64px; left: 50%; transform: translateX(-50%);
+  width: min(560px, calc(100vw - 40px));
+  background: #121622;
+  color: var(--fg);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  z-index: 40;
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.modal-body { padding: 12px 14px 16px; }
+.modal-close { border: 1px solid rgba(255,255,255,0.12); background: #161a24; color: var(--fg); border-radius: 6px; height: 28px; padding: 0 10px; cursor: pointer; }
+.shortcut-list { margin: 8px 0 0; padding-left: 18px; }
+.shortcut-list li { margin: 8px 0; }
+.key { display: inline-block; min-width: 16px; padding: 2px 6px; margin: 0 2px; border-radius: 6px; background: #0f1117; border: 1px solid rgba(255,255,255,0.12); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.modal-hint { margin-top: 8px; color: var(--muted); font-size: 12px; }
