@@ -38,6 +38,9 @@ let isAdding = false;
 let _programmaticScroll = false; // guard to avoid feedback loops
 let _lastScrollLeft = 0;
 let _hideEdgeTimer = null;
+let _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+let _fastScrolling = false;
+let _fastOffTimer = null;
 
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
 let listenersInitialized = false;
@@ -271,7 +274,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     homeLeftNode = columns[idx1]?.el || null;
     homeRightNode = columns[idx2]?.el || null;
     // Hide left edge by default so + is off-screen initially
-    try { grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0); _lastScrollLeft = grid.scrollLeft; } catch (_) {}
+    try {
+      grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0);
+      _lastScrollLeft = grid.scrollLeft;
+      _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    } catch (_) {}
     updateEdgeSnapState();
     // Edge cell buttons
     addLeftBtn.addEventListener('click', () => {
@@ -378,26 +385,32 @@ function hideRightEdge(smooth = false) {
 }
 
 // Toggle scroll snapping near edges so + buttons can remain visible once revealed
-function updateEdgeSnapState() {
-  const leftEdge = (leftEdgeEl?.offsetWidth || 0);
-  const rightEdge = (rightEdgeEl?.offsetWidth || 0);
-  const maxLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
-  const slack = 4; // tolerance where edges count as visible
-  const nearLeft = grid.scrollLeft <= (leftEdge + slack);
-  const nearRight = grid.scrollLeft >= (maxLeft - rightEdge - slack);
-  if (nearLeft || nearRight) grid.classList.add('no-snap'); else grid.classList.remove('no-snap');
-}
+function updateEdgeSnapState() { /* stickiness disabled */ }
 
 // Re-evaluate snapping as user scrolls and gently continue to hide + when nudged inward
 grid.addEventListener('scroll', () => {
   updateEdgeSnapState();
   if (_programmaticScroll) { _lastScrollLeft = grid.scrollLeft; return; }
+  // Stickiness disabled: only track and exit
+  _lastScrollLeft = grid.scrollLeft; return;
 
   const leftEdge = (leftEdgeEl?.offsetWidth || 0);
   const rightEdge = (rightEdgeEl?.offsetWidth || 0);
   const maxScrollLeft = Math.max(0, grid.scrollWidth - grid.clientWidth);
+  const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   const delta = grid.scrollLeft - _lastScrollLeft;
+  const dt = Math.max(1, now - _lastScrollTime);
+  const speed = Math.abs(delta) / dt; // px/ms
   _lastScrollLeft = grid.scrollLeft;
+  _lastScrollTime = now;
+
+  // Disable snapping during fast flicks; restore shortly after it slows/settles
+  const FAST_THRESH = 0.7; // px per ms
+  if (speed > FAST_THRESH) {
+    _fastScrolling = true;
+    if (_fastOffTimer) clearTimeout(_fastOffTimer);
+    _fastOffTimer = setTimeout(() => { _fastScrolling = false; updateEdgeSnapState(); }, 160);
+  }
 
   function scheduleHide(target) {
     if (_hideEdgeTimer) clearTimeout(_hideEdgeTimer);

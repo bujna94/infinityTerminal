@@ -49,7 +49,7 @@ html, body {
   display: flex; /* columns horizontally */
   align-items: stretch;
   gap: 0;
-  scroll-snap-type: x proximity; /* allow edges to be revealed without forced snap */
+  scroll-snap-type: none; /* disable column stickiness */
 }
 
 /* Disable snapping near edges so + buttons can remain visible */
