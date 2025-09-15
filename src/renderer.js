@@ -660,6 +660,15 @@ function resetToHome(scrollToStart = false) {
       return;
     }
 
+    // Reset: Cmd/Ctrl + Shift + R
+    const rKey = e.key === 'r' || e.key === 'R';
+    const resetCombo = (isMac ? e.metaKey : e.ctrlKey) && e.shiftKey && rKey;
+    if (resetCombo) {
+      e.preventDefault();
+      resetToHome(true);
+      return;
+    }
+
     // Toggle Overview popup: Cmd/Ctrl + Shift + V
     // Overview shortcut removed
 
