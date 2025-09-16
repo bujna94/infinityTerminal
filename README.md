@@ -72,4 +72,5 @@ Build a macOS App (DMG/ZIP)
 - Build: `npm run dist` → creates `.app`, `.dmg`, and `.zip` in `dist/`.
 - Icons: uses `resources/appLogo.icns`.
 - Code signing/notarization is optional; unsigned builds open via right‑click → Open.
-- `.gitignore` excludes `dist/`, so artifacts aren’t committed by default.
+- **Note**: Since the app isn't code-signed, macOS may quarantine it. To remove quarantine: `sudo xattr -r -d com.apple.quarantine /path/to/Infinity\ Terminal.app`
+- `.gitignore` excludes `dist/`, so artifacts aren't committed by default.
