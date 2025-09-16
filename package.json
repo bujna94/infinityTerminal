@@ -1,6 +1,6 @@
 {
   "name": "terminal-grid",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Fullscreen terminal app with two rows and endless columns",
   "main": "electron/main.js",
