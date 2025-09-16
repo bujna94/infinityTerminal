@@ -1,6 +1,13 @@
-Infinity Terminal — 2xN horizontally scrollable
+![Infinity Terminal](resources/appLogoWithBackground_1200x630px.png)
 
-Overview
+# Infinity Terminal — Two Rows. Endless Columns.
+
+## Screenshots
+
+![App Screenshot 1](resources/screenshot.png)
+![App Screenshot 2](resources/screenshot2.png)
+
+## Overview
 - Fullscreen Electron app showing a grid of terminals: always 2 rows, unlimited columns.
 - Scroll horizontally with a trackpad (two-finger swipe) to navigate columns.
 - Each column holds two terminals (top and bottom). Start with 2 columns (4 terminals).
