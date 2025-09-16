@@ -2,7 +2,7 @@
   "name": "terminal-grid",
   "version": "0.2.3",
   "private": true,
-  "description": "Fullscreen 2xN horizontally scrollable terminal app",
+  "description": "Fullscreen terminal app with two rows and endless columns",
   "main": "electron/main.js",
   "scripts": {
     "start": "node scripts/rebuild-pty.js && electron .",

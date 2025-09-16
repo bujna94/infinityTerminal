@@ -63,7 +63,9 @@ Project Structure
 - electron/preload.js: secure bridge exposing PTY APIs to the renderer.
 - src/index.html, src/styles.css: UI and layout.
 - src/renderer.js: xterm.js setup, 2xN grid logic.
- - resources/appLogo.icns: macOS app icon for packaged builds.
+ - resources/appLogoSmaller.icns: macOS app icon for packaged builds.
+ - resources/appLogoWithBackground_1200x630px.png: main logo with background.
+ - resources/screenshot.png, resources/screenshot2.png: app screenshots.
 
 Customization
 - Change default number of initial columns in `src/renderer.js`.
