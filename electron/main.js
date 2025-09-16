@@ -228,7 +228,7 @@ function showAbout() {
     buttons: ['OK'],
     title: `About ${name}`,
     message: `${name}`,
-    detail: `Version ${version}`,
+    detail: `Version ${version}\n\nBuilt with ❤️ by Pavol Bujna`,
     icon,
   }).catch(() => {});
 }
