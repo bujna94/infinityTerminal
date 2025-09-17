@@ -14,7 +14,7 @@
  - Optional horizontal minimap: drag to pan; toggle with a button or shortcut.
 
 Prerequisites
-- macOS (works on Windows/Linux too).
+- macOS (Windows/Linux untested but may work).
 - Node.js 18+ and npm.
 
 Install
