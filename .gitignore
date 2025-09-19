@@ -7,3 +7,16 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Code signing secrets and keys
+.env*
+*.cer
+*.p8
+*.p12
+*.key
+*.pem
+AuthKey_*.p8
+
+# macOS code signing
+*.provisionprofile
+*.mobileprovision

@@ -1,6 +1,6 @@
 {
   "name": "terminal-grid",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Fullscreen terminal app with two rows and endless columns",
   "main": "electron/main.js",
@@ -9,9 +9,9 @@
     "dev": "electron .",
     "postinstall": "echo skip",
     "rebuild:pty": "node scripts/rebuild-pty.js",
-    "dist": "electron-builder --mac",
-    "dist:dmg": "electron-builder --mac dmg",
-    "dist:zip": "electron-builder --mac zip"
+    "dist": "source .env.local && electron-builder --mac",
+    "dist:dmg": "source .env.local && electron-builder --mac dmg",
+    "dist:zip": "source .env.local && electron-builder --mac zip"
   },
   "dependencies": {
     "@xterm/xterm": "^5.5.0",
@@ -44,8 +44,11 @@
         "**/*.node",
         "node_modules/node-pty/**"
       ],
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "notarize": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "NSAppleEventsUsageDescription": "This app needs to control other applications for terminal functionality.",
         "NSMicrophoneUsageDescription": "This app does not use the microphone."
