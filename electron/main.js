@@ -118,7 +118,7 @@ app.on('before-quit', () => {
 
 // IPC: PTY lifecycle
 ipcMain.handle('pty:create', (event, payload) => {
-  const { id, cmd, args = [], cwd = process.cwd(), env = {} } = payload;
+  const { id, cmd, args = [], cwd = os.homedir(), env = {} } = payload;
   if (!id) throw new Error('pty:create requires id');
   if (ptys.has(id)) throw new Error(`PTY with id ${id} already exists`);
 

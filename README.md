@@ -78,8 +78,9 @@ Troubleshooting
 
 Build a macOS App (DMG/ZIP)
 - Install builder (already in devDependencies): `npm i`.
-- Build: `npm run dist` → creates `.app`, `.dmg`, and `.zip` in `dist/`.
-- Icons: uses `resources/appLogo.icns`.
-- Code signing/notarization is optional; unsigned builds open via right‑click → Open.
-- **Note**: Since the app isn't code-signed, macOS may quarantine it. To remove quarantine: `sudo xattr -r -d com.apple.quarantine /path/to/Infinity\ Terminal.app`
-- `.gitignore` excludes `dist/`, so artifacts aren't committed by default.
+- Build: `npm run dist` → creates signed, notarized `.app`, `.dmg`, and `.zip` in `dist/`.
+- Icons: uses `resources/appLogoSmaller.icns`.
+- **Code Signing & Notarization**: Fully implemented with Developer ID certificate.
+- **Security**: Apps install without warnings on macOS thanks to proper signing and notarization.
+- **Default Directory**: Terminal opens in user's home directory (like native Terminal.app).
+- `.gitignore` excludes `dist/` and signing secrets, so artifacts and credentials aren't committed.
