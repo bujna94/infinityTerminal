@@ -67,7 +67,7 @@
     },
     "linux": {
       "category": "Development",
-      "icon": "resources/appLogo.png",
+      "icon": "resources/icons",
       "executableName": "infinity-terminal",
       "extraFiles": [
         {
