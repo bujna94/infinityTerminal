@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>infinity-terminal.desktop</id>
+  <name>Infinity Terminal</name>
+  <summary>Fullscreen terminal app with two rows and endless columns</summary>
+  <description>
+    <p>Infinity Terminal is a fullscreen Electron terminal with a 2xN grid layout.</p>
+  </description>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer_name>Pavol Bujna</developer_name>
+  <launchable type="desktop-id">infinity-terminal.desktop</launchable>
+  <icon type="stock">infinity-terminal</icon>
+  <categories>
+    <category>Development</category>
+  </categories>
+</component>

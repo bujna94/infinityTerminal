@@ -14,7 +14,7 @@
  - Optional horizontal minimap: drag to pan; toggle with a button or shortcut.
 
 Prerequisites
-- macOS (Windows/Linux untested but may work).
+- macOS or Linux (Ubuntu 20.04+ recommended).
 - Node.js 18+ and npm.
 
 Install
@@ -84,3 +84,8 @@ Build a macOS App (DMG/ZIP)
 - **Security**: Apps install without warnings on macOS thanks to proper signing and notarization.
 - **Default Directory**: Terminal opens in user's home directory (like native Terminal.app).
 - `.gitignore` excludes `dist/` and signing secrets, so artifacts and credentials aren't committed.
+
+Build a Linux App (AppImage/DEB)
+- Build: `npm run dist:linux` → creates `.AppImage` and `.deb` in `dist/`.
+- Optional: `npm run dist:appimage` or `npm run dist:deb`.
+- If `node-pty` fails to load in the packaged app, ensure `asarUnpack` includes `**/*.node` and `node_modules/node-pty/**` (already configured).

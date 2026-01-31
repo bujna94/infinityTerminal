@@ -3,6 +3,8 @@
 let TerminalCtor = (window.xterm && window.xterm.Terminal) || window.Terminal;
 
 const grid = document.getElementById('grid');
+const addLeftOverlayBtn = document.getElementById('addLeftOverlayBtn');
+const addRightOverlayBtn = document.getElementById('addRightOverlayBtn');
 const homeBtn = document.getElementById('homeBtn');
 const resetBtn = document.getElementById('resetBtn');
 const shortcutsBtn = document.getElementById('shortcutsBtn');
@@ -18,6 +20,9 @@ const updateClose = document.getElementById('updateClose');
 const updateNowBtn = document.getElementById('updateNowBtn');
 const updateLaterBtn = document.getElementById('updateLaterBtn');
 const updateMessage = document.getElementById('updateMessage');
+const windowControlButtons = document.querySelectorAll('[data-window-action]');
+const menuButtons = document.querySelectorAll('.menu-btn');
+const menuItems = document.querySelectorAll('.menu-item');
 
 function openShortcuts() {
   try { shortcutsOverlay.classList.remove('hidden'); } catch (_) {}
@@ -30,10 +35,72 @@ function closeShortcuts() {
 function isShortcutsOpen() {
   try { return !shortcutsModal.classList.contains('hidden'); } catch (_) { return false; }
 }
+
+function initWindowControls() {
+  if (!windowControlButtons || windowControlButtons.length === 0) return;
+  let ipcRenderer = null;
+  try { ipcRenderer = require('electron').ipcRenderer; } catch (_) {}
+  if (!ipcRenderer) return;
+  windowControlButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.getAttribute('data-window-action');
+      if (action) ipcRenderer.send('window:control', { action });
+    });
+  });
+}
+
+function initAppMenu() {
+  if (!menuButtons || menuButtons.length === 0) return;
+  const menus = Array.from(document.querySelectorAll('.menu'));
+  const closeAll = () => menus.forEach((m) => m.classList.remove('open'));
+  const openMenu = (m) => {
+    menus.forEach((x) => { if (x !== m) x.classList.remove('open'); });
+    m.classList.add('open');
+  };
+  menus.forEach((menu) => {
+    const btn = menu.querySelector('.menu-btn');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (menu.classList.contains('open')) closeAll();
+      else openMenu(menu);
+    });
+  });
+  document.addEventListener('click', closeAll);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAll();
+  });
+
+  let ipcRenderer = null;
+  try { ipcRenderer = require('electron').ipcRenderer; } catch (_) {}
+  menuItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      const action = item.getAttribute('data-action');
+      closeAll();
+      if (!action) return;
+      if (action === 'check-updates') {
+        if (ipcRenderer) ipcRenderer.send('app:check-updates');
+        return;
+      }
+      if (action === 'about') {
+        if (ipcRenderer) ipcRenderer.send('app:about');
+        return;
+      }
+      if (action === 'quit') {
+        if (ipcRenderer) ipcRenderer.send('window:control', { action: 'close' });
+        return;
+      }
+      if (ipcRenderer) ipcRenderer.send('window:control', { action });
+    });
+  });
+}
 const leftEdgeEl = document.querySelector('.edge-cell.left');
 const rightEdgeEl = document.querySelector('.edge-cell.right');
 const addLeftBtn = document.getElementById('addLeftCell');
 const addRightBtn = document.getElementById('addRightCell');
+
+initWindowControls();
+initAppMenu();
 
 let pty = null;
 try {
@@ -187,10 +254,11 @@ function makeId() {
 function createTerminal(paneEl) {
   const Ctor = TerminalCtor || (window.xterm && window.xterm.Terminal) || window.Terminal;
   if (!Ctor) throw new Error('xterm Terminal constructor not available');
+  const isMac = !!(window.platform && window.platform.isMac);
   const term = new Ctor({
     cursorBlink: true,
     scrollback: 5000,
-    fontSize: 13,
+    fontSize: isMac ? 13 : 15,
     fontFamily: 'Menlo, Monaco, Consolas, monospace',
     rendererType: 'canvas',
     theme: {
@@ -220,8 +288,8 @@ function createTerminal(paneEl) {
     measurer.textContent = 'MMMMMMMMMM'; // 10 chars for precision
     measurer.style.position = 'absolute';
     measurer.style.visibility = 'hidden';
-    measurer.style.fontFamily = 'Menlo, Monaco, Consolas, monospace';
-    measurer.style.fontSize = '13px';
+    measurer.style.fontFamily = term.options.fontFamily || 'Menlo, Monaco, Consolas, monospace';
+    measurer.style.fontSize = `${term.options.fontSize || 13}px`;
     measurer.style.lineHeight = 'normal';
     el.appendChild(measurer);
     const cw = measurer.getBoundingClientRect().width / 10;
@@ -511,6 +579,7 @@ function waitForPty(maxMs = 3000) {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     const isMac = !!(window.platform && window.platform.isMac);
+    document.title = 'Infinity Terminal';
     const spacer = document.getElementById('trafficSpacer');
     const setSpacer = (visible) => {
       if (!spacer) return;
@@ -629,6 +698,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     // Toolbar Home button
     if (homeBtn) homeBtn.addEventListener('click', () => { scrollHome(true); });
+    if (addLeftOverlayBtn) addLeftOverlayBtn.addEventListener('click', () => {
+      addColumnLeft();
+      try { renderOverview(); updateOverviewViewport(); } catch (_) {}
+      updateEdgeSnapState();
+    });
+    if (addRightOverlayBtn) addRightOverlayBtn.addEventListener('click', () => {
+      addColumnRight(true);
+      hideRightEdge(false);
+      try { renderOverview(); updateOverviewViewport(); } catch (_) {}
+      updateEdgeSnapState();
+    });
     // Toolbar Reset button
     if (resetBtn) resetBtn.addEventListener('click', () => { resetToHome(true); });
     if (shortcutsBtn) shortcutsBtn.addEventListener('click', openShortcuts);

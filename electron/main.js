@@ -5,6 +5,7 @@ const pty = require('node-pty');
 const https = require('https');
 
 const isMac = process.platform === 'darwin';
+const isLinux = process.platform === 'linux';
 let _latestUpdatePayload = null; // cache last update info to resend after load
 let isQuitting = false;
 
@@ -16,6 +17,7 @@ function createWindow() {
     width: 1280,
     height: 800,
     fullscreenable: true,
+    ...(isLinux ? { title: 'Infinity Terminal', backgroundColor: '#0f1117', autoHideMenuBar: true, frame: false } : {}),
     ...(isMac ? { titleBarStyle: 'hiddenInset', titleBarOverlay: { color: '#0f1117', symbolColor: '#e5e9f0', height: 42 } } : {}),
     icon: path.join(__dirname, '..', 'resources', 'appLogo.png'),
     webPreferences: {
@@ -27,6 +29,9 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
+  if (!isMac) {
+    try { win.setMenuBarVisibility(false); } catch (_) {}
+  }
 
   // Notify renderer whether macOS traffic lights are visible (not in fullscreen)
   const sendTrafficState = () => {
@@ -83,7 +88,7 @@ app.whenReady().then(() => {
     },
   ];
   const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+  Menu.setApplicationMenu(isMac ? menu : null);
 
   createWindow();
 
@@ -179,6 +184,24 @@ ipcMain.on('pty:kill', (event, { id }) => {
     try { proc.kill(); } catch (_) {}
     ptys.delete(id);
   }
+});
+
+ipcMain.on('window:control', (_event, payload) => {
+  const { action } = payload || {};
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  if (!win || !action) return;
+  if (action === 'minimize') return win.minimize();
+  if (action === 'maximize') return win.maximize();
+  if (action === 'restore') return win.restore();
+  if (action === 'close') return win.close();
+});
+
+ipcMain.on('app:check-updates', () => {
+  try { checkForUpdatesManual(); } catch (_) {}
+});
+
+ipcMain.on('app:about', () => {
+  try { showAbout(); } catch (_) {}
 });
 
 function defaultShell() {

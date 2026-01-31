@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Terminal Grid</title>
+    <title>Infinity Terminal</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
   </head>
@@ -15,9 +15,30 @@
         <button id="resetBtn" title="Recreate original 2 columns (Reset)">↺ Reset</button>
         <button id="minimapBtn" title="Toggle minimap (Cmd/Ctrl+Shift+M)">🗺 Minimap</button>
         <button id="shortcutsBtn" title="Show keyboard shortcuts">⌨️ Shortcuts</button>
+        <div class="menu-bar" aria-label="App menu">
+          <div class="menu">
+            <button class="menu-btn" type="button">Help</button>
+            <div class="menu-popover" role="menu">
+              <button class="menu-item" data-action="check-updates" role="menuitem">Check for Updates…</button>
+              <div class="menu-sep" aria-hidden="true"></div>
+              <button class="menu-item" data-action="about" role="menuitem">About Infinity Terminal</button>
+            </div>
+          </div>
+        </div>
         <span class="hint">Scroll left/right to add columns</span>
       </div>
       <span class="brand"><img class="brand-logo" src="../resources/appLogo.png" alt="" />Infinity Terminal</span>
+      <div class="window-controls" aria-label="Window controls">
+        <button class="window-btn" data-window-action="minimize" title="Minimize">—</button>
+        <button class="window-btn" data-window-action="maximize" title="Maximize">▢</button>
+        <button class="window-btn close" data-window-action="close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="edge-overlay left">
+      <button id="addLeftOverlayBtn" class="edge-btn-cell" title="Add column on the left">＋</button>
+    </div>
+    <div class="edge-overlay right">
+      <button id="addRightOverlayBtn" class="edge-btn-cell" title="Add column on the right">＋</button>
     </div>
     <div id="grid" class="grid">
       <div class="edge-cell left"><button id="addLeftCell" class="edge-btn-cell" title="Add column on the left">＋</button></div>
@@ -48,6 +69,7 @@
           <li><span class="key">Cmd/Ctrl</span> + <span class="key">Shift</span> + <span class="key">M</span> — Toggle minimap</li>
           
           <li><span class="key">Option</span> + <span class="key">Command</span> + <span class="key">←/→</span> (macOS) — Step a column; hold to smooth-scroll</li>
+          <li><span class="key">Shift</span> + <span class="key">Mouse Wheel</span> (Linux) — Horizontal scroll between columns</li>
         </ul>
         <div class="modal-hint">Press <span class="key">Esc</span> or <span class="key">Cmd/Ctrl</span> + <span class="key">/</span> to close</div>
       </div>

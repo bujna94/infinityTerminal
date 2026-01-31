@@ -69,6 +69,79 @@ body.is-mac.traffic-visible #toolbar .toolbar-actions { order: 2; margin-left: a
   -webkit-app-region: no-drag;
 }
 .toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.menu-bar { display: inline-flex; align-items: center; gap: 6px; -webkit-app-region: no-drag; }
+.is-mac .menu-bar { display: none; }
+.menu { position: relative; }
+.menu-btn {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #161a24;
+  color: var(--fg);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.menu-btn:hover { border-color: var(--accent); }
+.menu.open .menu-btn { border-color: var(--accent); }
+.menu-popover {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  min-width: 180px;
+  padding: 6px;
+  background: #121622;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  display: none;
+  z-index: 50;
+}
+.menu.open .menu-popover { display: block; }
+.menu-item {
+  width: 100%;
+  text-align: left;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.menu-item:hover {
+  background: rgba(79,115,255,0.12);
+  border-color: rgba(79,115,255,0.35);
+}
+.menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: rgba(255,255,255,0.08);
+}
+.window-controls {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  -webkit-app-region: no-drag;
+}
+.window-btn {
+  height: 28px;
+  min-width: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #161a24;
+  color: var(--fg);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.window-btn:hover { border-color: var(--accent); }
+.window-btn.close:hover { border-color: #ff5f57; }
+
+/* Linux frameless window controls */
+body:not(.is-mac) .window-controls { display: inline-flex; }
 
 /* In windowed macOS, place brand left and buttons right */
 body.is-mac.traffic-visible #toolbar .brand { order: 1; margin-left: 0; }
@@ -114,6 +187,28 @@ body.is-mac.traffic-visible #toolbar .toolbar-actions { order: 2; margin-left: a
 
 body.minimap-open .grid { bottom: var(--overview-h); }
 
+/* Always-visible edge add buttons (overlay) */
+.edge-overlay {
+  position: fixed;
+  display: none;
+  top: 42px;
+  bottom: 0;
+  width: var(--edge);
+  background: rgba(22,26,36,0.9);
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+.edge-overlay.left { left: 0; border-right: 1px solid rgba(255,255,255,0.06); }
+.edge-overlay.right { right: 0; border-left: 1px solid rgba(255,255,255,0.06); }
+body.minimap-open .edge-overlay { bottom: var(--overview-h); }
+body:not(.is-mac) .edge-overlay { display: flex; }
+body:not(.is-mac) .grid { padding-left: var(--edge); padding-right: var(--edge); }
+
 /* Disable snapping near edges so + buttons can remain visible */
 .grid.no-snap {
   scroll-snap-type: none;
@@ -126,6 +221,10 @@ body.minimap-open .grid { bottom: var(--overview-h); }
   display: grid;
   grid-template-rows: 1fr 1fr; /* two rows */
   scroll-snap-align: start;
+}
+body:not(.is-mac) .column {
+  width: calc((100vw - (2 * var(--edge))) / 2);
+  min-width: calc((100vw - (2 * var(--edge))) / 2);
 }
 
 .pane {
@@ -152,13 +251,14 @@ body.minimap-open .grid { bottom: var(--overview-h); }
   min-width: var(--edge);
   background: rgba(22,26,36,0.9);
   color: var(--fg);
-  display: flex; /* always visible */
+  display: flex; /* mac uses in-grid edges */
   align-items: center;
   justify-content: center;
   user-select: none;
 }
 .edge-cell.left { border-right: 1px solid rgba(255,255,255,0.06); }
 .edge-cell.right { border-left: 1px solid rgba(255,255,255,0.06); }
+body:not(.is-mac) .edge-cell { display: none; }
 .edge-btn-cell {
   width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;

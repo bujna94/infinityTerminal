@@ -1,7 +1,8 @@
 {
-  "name": "terminal-grid",
+  "name": "infinity-terminal",
   "version": "0.2.7",
   "private": true,
+  "author": "Pavol Bujna <bujna94@gmail.com>",
   "description": "Fullscreen terminal app with two rows and endless columns",
   "main": "electron/main.js",
   "scripts": {
@@ -11,7 +12,12 @@
     "rebuild:pty": "node scripts/rebuild-pty.js",
     "dist": "source .env.local && electron-builder --mac",
     "dist:dmg": "source .env.local && electron-builder --mac dmg",
-    "dist:zip": "source .env.local && electron-builder --mac zip"
+    "dist:zip": "source .env.local && electron-builder --mac zip",
+    "dist:all": "bash -lc 'if [ -f .env.local ]; then source .env.local; fi; electron-builder --mac --linux'",
+    "dist:linux": "electron-builder --linux",
+    "dist:linux:clean": "rm -rf dist && electron-builder --linux",
+    "dist:appimage": "electron-builder --linux AppImage",
+    "dist:deb": "electron-builder --linux deb"
   },
   "dependencies": {
     "@xterm/xterm": "^5.5.0",
@@ -24,6 +30,7 @@
   "build": {
     "appId": "com.infinityterminal.app",
     "productName": "Infinity Terminal",
+    "icon": "resources/appLogo.png",
     "files": [
       "electron/**/*",
       "src/**/*",
@@ -33,6 +40,10 @@
       "!**/node_modules/.cache/**"
     ],
     "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/node-pty/**"
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
@@ -40,10 +51,6 @@
         "zip"
       ],
       "icon": "resources/appLogoSmaller.icns",
-      "asarUnpack": [
-        "**/*.node",
-        "node_modules/node-pty/**"
-      ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "notarize": true,
@@ -57,6 +64,31 @@
     "dmg": {
       "backgroundColor": "#0f1117",
       "title": "Infinity Terminal Installer"
+    },
+    "linux": {
+      "category": "Development",
+      "icon": "resources/appLogo.png",
+      "executableName": "infinity-terminal",
+      "extraFiles": [
+        {
+          "from": "resources/linux/infinity-terminal.appdata.xml",
+          "to": "usr/share/metainfo/infinity-terminal.appdata.xml"
+        }
+      ],
+      "desktop": {
+        "entry": {
+          "Name": "Infinity Terminal",
+          "Comment": "Fullscreen terminal app with two rows and endless columns",
+          "Icon": "infinity-terminal"
+        }
+      },
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "deb": {
+      "artifactName": "infinity-terminal_${version}_${arch}.${ext}"
     },
     "directories": {
       "output": "dist"
