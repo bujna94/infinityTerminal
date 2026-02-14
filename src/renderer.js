@@ -283,6 +283,16 @@ function createTerminal(paneEl) {
   try { paneEl.addEventListener('mousedown', () => { _activeTermRef = { id, term }; }); } catch (_) {}
 
   function measureCharSize(el) {
+    try {
+      const cell = term && term._core && term._core._renderService &&
+        term._core._renderService.dimensions &&
+        term._core._renderService.dimensions.css &&
+        term._core._renderService.dimensions.css.cell;
+      if (cell && cell.width > 0 && cell.height > 0) {
+        return { cw: cell.width, ch: cell.height };
+      }
+    } catch (_) {}
+
     // Create an offscreen measurer to estimate char cell size
     const measurer = document.createElement('span');
     measurer.textContent = 'MMMMMMMMMM'; // 10 chars for precision
@@ -290,7 +300,9 @@ function createTerminal(paneEl) {
     measurer.style.visibility = 'hidden';
     measurer.style.fontFamily = term.options.fontFamily || 'Menlo, Monaco, Consolas, monospace';
     measurer.style.fontSize = `${term.options.fontSize || 13}px`;
-    measurer.style.lineHeight = 'normal';
+    const fontSize = Number(term.options.fontSize) || 13;
+    const lineHeight = Number(term.options.lineHeight) || 1;
+    measurer.style.lineHeight = `${fontSize * lineHeight}px`;
     el.appendChild(measurer);
     const cw = measurer.getBoundingClientRect().width / 10;
     const ch = measurer.getBoundingClientRect().height;
@@ -300,16 +312,24 @@ function createTerminal(paneEl) {
 
   function fit() {
     if (disposed) return;
-    const container = paneEl.getBoundingClientRect();
+    const width = Math.max(0, paneEl.clientWidth);
+    const height = Math.max(0, paneEl.clientHeight);
+    if (width === 0 || height === 0) return;
     const { cw, ch } = measureCharSize(paneEl);
-    const cols = Math.max(2, Math.floor(container.width / cw));
-    const rows = Math.max(2, Math.floor(container.height / ch));
+    const cols = Math.max(2, Math.floor(width / cw));
+    const rows = Math.max(2, Math.floor(height / ch));
     try { term.resize(cols, rows); } catch (_) {}
     pty.resize(id, cols, rows);
   }
 
   const ro = new ResizeObserver(() => fit());
   ro.observe(paneEl);
+  try {
+    requestAnimationFrame(() => fit());
+    if (document.fonts && typeof document.fonts.ready?.then === 'function') {
+      document.fonts.ready.then(() => fit()).catch(() => {});
+    }
+  } catch (_) {}
 
   // Register handlers in maps; single global IPC listeners dispatch here
   // Track SSH connection lifecycle to color backgrounds per host
@@ -781,6 +801,53 @@ function resetToHome(scrollToStart = false) {
 (() => {
   const isMac = (window.platform && window.platform.isMac) ||
                 (typeof process !== 'undefined' && process.platform === 'darwin');
+  function writeClipboardText(text) {
+    if (!text) return;
+    try {
+      const { clipboard } = require('electron');
+      if (clipboard && typeof clipboard.writeText === 'function') {
+        clipboard.writeText(text);
+        return;
+      }
+    } catch (_) {}
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
+    } catch (_) {}
+  }
+  async function readClipboardText() {
+    try {
+      const { clipboard } = require('electron');
+      if (clipboard && typeof clipboard.readText === 'function') {
+        return clipboard.readText() || '';
+      }
+    } catch (_) {}
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) return await navigator.clipboard.readText();
+    } catch (_) {}
+    return '';
+  }
+  function getCopyText() {
+    try {
+      if (_activeTermRef && _activeTermRef.term &&
+          typeof _activeTermRef.term.hasSelection === 'function' &&
+          _activeTermRef.term.hasSelection()) {
+        return _activeTermRef.term.getSelection();
+      }
+    } catch (_) {}
+    try {
+      // Fallback: copy from any terminal that currently has a selection.
+      for (const col of columns) {
+        const refs = [col && col.top, col && col.bottom];
+        for (const ref of refs) {
+          const term = ref && ref.term;
+          if (term && typeof term.hasSelection === 'function' && term.hasSelection()) {
+            return term.getSelection();
+          }
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
   window.addEventListener('keydown', (e) => {
     const t = e.target;
     const isXtermTextarea = !!(t && t.tagName === 'TEXTAREA' && t.classList && t.classList.contains('xterm-helper-textarea'));
@@ -788,35 +855,41 @@ function resetToHome(scrollToStart = false) {
       t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable === true
     ));
     if (inEditable) return; // allow global shortcuts when focused in xterm's helper textarea
-    // Copy: Cmd/Ctrl + C (only if a selection exists in active terminal)
-    const modCopy = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && (e.key === 'c' || e.key === 'C');
-    if (modCopy && _activeTermRef && _activeTermRef.term && typeof _activeTermRef.term.hasSelection === 'function' && _activeTermRef.term.hasSelection()) {
-      try {
-        const text = _activeTermRef.term.getSelection();
-        if (text) {
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text);
-          else {
-            const { clipboard } = require('electron');
-            if (clipboard) clipboard.writeText(text);
-          }
+    // Copy shortcuts:
+    // macOS: Cmd + C when terminal has selection
+    // Linux/Windows: Ctrl + Shift + C (and keep Ctrl + C copy if selection exists)
+    const cKey = e.key === 'c' || e.key === 'C';
+    const linuxStyleCopy = !isMac && e.ctrlKey && e.shiftKey && cKey;
+    const legacyCopy = !isMac && e.ctrlKey && !e.shiftKey && cKey;
+    const modCopy = isMac ? (e.metaKey && !e.shiftKey && cKey) : (linuxStyleCopy || legacyCopy);
+    if (modCopy) {
+      const text = getCopyText();
+      if (!text) {
+        if (linuxStyleCopy) {
+          e.preventDefault();
+          return;
         }
+        return;
+      }
+      try {
+        writeClipboardText(text);
       } catch (_) {}
       e.preventDefault();
       return;
     }
-    // Paste: Cmd/Ctrl + V
-    const modPaste = (isMac ? e.metaKey : e.ctrlKey) && !e.shiftKey && (e.key === 'v' || e.key === 'V');
+    // Paste shortcuts:
+    // macOS: Cmd + V
+    // Linux/Windows: Ctrl + Shift + V (and keep Ctrl + V for compatibility)
+    const vKey = e.key === 'v' || e.key === 'V';
+    const linuxStylePaste = !isMac && e.ctrlKey && e.shiftKey && vKey;
+    const legacyPaste = !isMac && e.ctrlKey && !e.shiftKey && vKey;
+    const modPaste = isMac ? (e.metaKey && !e.shiftKey && vKey) : (linuxStylePaste || legacyPaste);
     if (modPaste && _activeTermRef && _activeTermRef.id) {
       e.preventDefault();
       try {
         const doPaste = async () => {
           try {
-            let text = '';
-            if (navigator.clipboard && navigator.clipboard.readText) text = await navigator.clipboard.readText();
-            else {
-              const { clipboard } = require('electron');
-              if (clipboard) text = clipboard.readText();
-            }
+            const text = await readClipboardText();
             if (text) pty.write(_activeTermRef.id, text);
           } catch (_) {}
         };
