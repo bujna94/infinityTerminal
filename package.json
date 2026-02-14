@@ -13,11 +13,11 @@
     "dist": "source .env.local && electron-builder --mac",
     "dist:dmg": "source .env.local && electron-builder --mac dmg",
     "dist:zip": "source .env.local && electron-builder --mac zip",
-    "dist:all": "bash -lc 'if [ -f .env.local ]; then source .env.local; fi; electron-builder --mac --linux'",
-    "dist:linux": "electron-builder --linux",
-    "dist:linux:clean": "rm -rf dist && electron-builder --linux",
-    "dist:appimage": "electron-builder --linux AppImage",
-    "dist:deb": "electron-builder --linux deb"
+    "dist:all": "bash -lc 'if [ -f .env.local ]; then source .env.local; fi; node scripts/patch-electron-builder.js && electron-builder --mac --linux'",
+    "dist:linux": "node scripts/patch-electron-builder.js && electron-builder --linux",
+    "dist:linux:clean": "rm -rf dist && node scripts/patch-electron-builder.js && electron-builder --linux",
+    "dist:appimage": "node scripts/patch-electron-builder.js && electron-builder --linux AppImage",
+    "dist:deb": "node scripts/patch-electron-builder.js && electron-builder --linux deb"
   },
   "dependencies": {
     "@xterm/xterm": "^5.5.0",
