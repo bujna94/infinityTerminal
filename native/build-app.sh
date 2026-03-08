@@ -58,7 +58,7 @@ cp -r "${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle" \
       "${APP_PATH}/Contents/Resources/"
 
 # ── App icon ──────────────────────────────────────────────────────────────────
-ICON_SRC="${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle/Contents/Resources/AppIcon.icns"
+ICON_SRC="${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle/AppIcon.icns"
 [ -f "${ICON_SRC}" ] && cp "${ICON_SRC}" "${APP_PATH}/Contents/Resources/AppIcon.icns"
 
 # ── Info.plist ────────────────────────────────────────────────────────────────
@@ -103,6 +103,7 @@ cat > "${APP_PATH}/Contents/Info.plist" << 'PLIST'
 PLIST
 
 # ── Strip xattrs + fix permissions ───────────────────────────────────────────
+chflags -R nouchg "${APP_PATH}" 2>/dev/null || true
 chmod -R u+w "${APP_PATH}"
 xattr -cr "${APP_PATH}" 2>/dev/null || true
 
