@@ -124,18 +124,57 @@ spctl --assess --type execute "${APP_PATH}" 2>&1 || echo "   (spctl: not yet not
 # ── DMG ───────────────────────────────────────────────────────────────────────
 if [[ "$1" == "--dmg" ]]; then
     echo "→ Creating DMG…"
-    hdiutil detach "/Volumes/Infinity Terminal" 2>/dev/null || true
-    rm -f "${DMG_PATH}"
-    create-dmg \
-        --volname "Infinity Terminal" \
-        --window-size 540 380 \
-        --icon-size 128 \
-        --icon "InfinityTerminal.app" 130 180 \
-        --app-drop-link 400 180 \
-        --hide-extension "InfinityTerminal.app" \
-        --no-internet-enable \
-        "${DMG_PATH}" \
-        "${APP_PATH}"
+    VOLNAME="Infinity Terminal"
+    MOUNT_DIR="/Volumes/${VOLNAME}"
+    RW_DMG=".build/rw_staging.dmg"
+
+    hdiutil detach "${MOUNT_DIR}" 2>/dev/null || true
+    rm -f "${DMG_PATH}" "${RW_DMG}"
+
+    # Create a writable DMG, mount it, set up contents + Finder layout
+    hdiutil create -size 30m -volname "${VOLNAME}" -fs HFS+ \
+        -fsargs "-c c=16,a=16,b=16" "${RW_DMG}"
+    hdiutil attach "${RW_DMG}" -mountpoint "${MOUNT_DIR}"
+
+    cp -r "${APP_PATH}" "${MOUNT_DIR}/"
+    ln -s /Applications "${MOUNT_DIR}/Applications"
+
+    # Copy the real Applications folder icon onto the symlink
+    swift -e '
+import AppKit
+let ws = NSWorkspace.shared
+let icon = ws.icon(forFile: "/Applications")
+ws.setIcon(icon, forFile: "'"${MOUNT_DIR}"'/Applications")
+'
+
+    # Configure Finder window layout via AppleScript
+    osascript << APPLESCRIPT
+tell application "Finder"
+    tell disk "${VOLNAME}"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set bounds of container window to {200, 120, 740, 500}
+        set theViewOptions to the icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 128
+        set position of item "InfinityTerminal.app" of container window to {130, 180}
+        set position of item "Applications" of container window to {400, 180}
+        close
+        open
+        update without registering applications
+        delay 2
+        close
+    end tell
+end tell
+APPLESCRIPT
+
+    hdiutil detach "${MOUNT_DIR}"
+
+    # Convert to compressed read-only DMG
+    hdiutil convert "${RW_DMG}" -format UDZO -imagekey zlib-level=9 -o "${DMG_PATH}"
+    rm -f "${RW_DMG}"
     xattr -cr "${DMG_PATH}" 2>/dev/null || true
 
     # ── Notarize ──────────────────────────────────────────────────────────────
