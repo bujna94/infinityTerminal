@@ -130,6 +130,7 @@ if [[ "$1" == "--dmg" ]]; then
     rm -rf "${STAGING}"
     mkdir -p "${STAGING}"
     cp -r "${APP_PATH}" "${STAGING}/"
+    ln -s /Applications "${STAGING}/Applications"
     hdiutil create -volname "Infinity Terminal" \
         -srcfolder "${STAGING}" \
         -ov -format UDZO \
