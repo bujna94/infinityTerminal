@@ -126,17 +126,17 @@ if [[ "$1" == "--dmg" ]]; then
     echo "→ Creating DMG…"
     hdiutil detach "/Volumes/Infinity Terminal" 2>/dev/null || true
     rm -f "${DMG_PATH}"
-    STAGING=".build/dmg_staging"
-    rm -rf "${STAGING}"
-    mkdir -p "${STAGING}"
-    cp -r "${APP_PATH}" "${STAGING}/"
-    ln -s /Applications "${STAGING}/Applications"
-    hdiutil create -volname "Infinity Terminal" \
-        -srcfolder "${STAGING}" \
-        -ov -format UDZO \
-        "${DMG_PATH}"
-    rm -rf "${STAGING}"
-    xattr -cr "${DMG_PATH}"
+    create-dmg \
+        --volname "Infinity Terminal" \
+        --window-size 540 380 \
+        --icon-size 128 \
+        --icon "InfinityTerminal.app" 130 180 \
+        --app-drop-link 400 180 \
+        --hide-extension "InfinityTerminal.app" \
+        --no-internet-enable \
+        "${DMG_PATH}" \
+        "${APP_PATH}"
+    xattr -cr "${DMG_PATH}" 2>/dev/null || true
 
     # ── Notarize ──────────────────────────────────────────────────────────────
     if [[ -n "${APPLE_ID}" && -n "${APPLE_PASSWORD}" ]]; then
