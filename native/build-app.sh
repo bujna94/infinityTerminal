@@ -54,6 +54,9 @@ mkdir -p "${APP_PATH}/Contents/Resources"
 cp "${BUILD_DIR}/${PRODUCT}" "${APP_PATH}/Contents/MacOS/${PRODUCT}"
 
 # ── SPM resource bundle ───────────────────────────────────────────────────────
+chflags -R nouchg "${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle" 2>/dev/null || true
+chmod -R u+w "${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle"
+xattr -cr "${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle" 2>/dev/null || true
 cp -r "${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle" \
       "${APP_PATH}/Contents/Resources/"
 
@@ -121,11 +124,17 @@ spctl --assess --type execute "${APP_PATH}" 2>&1 || echo "   (spctl: not yet not
 # ── DMG ───────────────────────────────────────────────────────────────────────
 if [[ "$1" == "--dmg" ]]; then
     echo "→ Creating DMG…"
+    hdiutil detach "/Volumes/Infinity Terminal" 2>/dev/null || true
     rm -f "${DMG_PATH}"
+    STAGING=".build/dmg_staging"
+    rm -rf "${STAGING}"
+    mkdir -p "${STAGING}"
+    cp -r "${APP_PATH}" "${STAGING}/"
     hdiutil create -volname "Infinity Terminal" \
-        -srcfolder "${APP_PATH}" \
+        -srcfolder "${STAGING}" \
         -ov -format UDZO \
         "${DMG_PATH}"
+    rm -rf "${STAGING}"
     xattr -cr "${DMG_PATH}"
 
     # ── Notarize ──────────────────────────────────────────────────────────────
