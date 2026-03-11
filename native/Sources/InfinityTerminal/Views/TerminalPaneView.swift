@@ -154,6 +154,8 @@ struct TerminalPaneView: NSViewRepresentable {
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             DispatchQueue.main.async {
                 self.session.markExited(code: exitCode ?? 0)
+                // Auto-restart: reopen a fresh shell in the same pane (like the X button).
+                self.restartProcess()
             }
         }
 
