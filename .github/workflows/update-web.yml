@@ -15,27 +15,9 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
           # Fetch release body via GitHub API
-          BODY=$(gh api "repos/${{ github.repository }}/releases/tags/${GITHUB_REF_NAME}" --jq '.body')
-          echo "body<<ENDOFBODY" >> "$GITHUB_OUTPUT"
-          echo "$BODY" >> "$GITHUB_OUTPUT"
-          echo "ENDOFBODY" >> "$GITHUB_OUTPUT"
+          gh api "repos/${{ github.repository }}/releases/tags/${GITHUB_REF_NAME}" --jq '.body' > /tmp/release_body.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build changelog HTML
-        id: changelog
-        run: |
-          # Extract bullet points from release body and convert to <li> tags
-          ITEMS=$(echo "${{ steps.info.outputs.body }}" \
-            | grep -E '^\s*[-*]' \
-            | sed 's/^\s*[-*]\s*//' \
-            | sed 's/\*\*\([^*]*\)\*\*/<strong>\1<\/strong>/g' \
-            | sed 's/`\([^`]*\)`/<code>\1<\/code>/g' \
-            | while IFS= read -r line; do echo "                <li>${line}</li>"; done)
-
-          echo "items<<ENDOFITEMS" >> "$GITHUB_OUTPUT"
-          echo "$ITEMS" >> "$GITHUB_OUTPUT"
-          echo "ENDOFITEMS" >> "$GITHUB_OUTPUT"
 
       - name: Clone web repo
         run: |
@@ -44,34 +26,67 @@ jobs:
       - name: Update index.html
         run: |
           cd web
-          VERSION="${{ steps.info.outputs.version }}"
-          DATE="$(date -u +%Y-%m-%d)"
-          ITEMS='${{ steps.changelog.outputs.items }}'
-
-          # Update structured data version
-          sed -i "s/\"softwareVersion\": \"[^\"]*\"/\"softwareVersion\": \"${VERSION}\"/" index.html
-
-          # Update structured data date
-          sed -i "s/\"datePublished\": \"[^\"]*\"/\"datePublished\": \"${DATE}\"/" index.html
-
-          # Update download section version line
-          sed -i "s|<p>v[0-9.]*|<p>v${VERSION}|" index.html
-
-          # Update "What's New" heading
-          sed -i "s|What's New in v[0-9.]*|What's New in v${VERSION}|" index.html
-
-          # Replace changelog items (everything between the tight list ul tags)
-          python3 - "$ITEMS" <<'PYEOF'
+          python3 - "${{ steps.info.outputs.version }}" /tmp/release_body.md <<'PYEOF'
           import sys, re
+          from datetime import datetime, timezone
 
-          items = sys.argv[1]
-          with open("index.html", "r") as f:
+          version = sys.argv[1]
+          with open(sys.argv[2]) as f:
+              body = f.read()
+          date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+          with open("index.html") as f:
               html = f.read()
 
-          # Replace the <ul class="tight"> contents in the What's New card
-          pattern = r'(<ul class="tight">)\s*(<li>.*?</li>\s*)*(\s*</ul>)'
-          replacement = r'\1\n' + items + r'\n              \3'
-          html = re.sub(pattern, replacement, html, count=1, flags=re.DOTALL)
+          # 1. softwareVersion in structured data
+          html = re.sub(
+              r'"softwareVersion":\s*"[^"]*"',
+              f'"softwareVersion": "{version}"',
+              html
+          )
+
+          # 2. datePublished in structured data
+          html = re.sub(
+              r'"datePublished":\s*"[^"]*"',
+              f'"datePublished": "{date}"',
+              html
+          )
+
+          # 3. Download section version line: <p>v1.0.x — ...
+          html = re.sub(
+              r'(<p>v)[0-9.]+',
+              rf'\g<1>{version}',
+              html
+          )
+
+          # 4. "What's New in v..." heading (handles both straight and curly apostrophes)
+          html = re.sub(
+              r"(What.s New in v)[0-9.]+",
+              rf"\g<1>{version}",
+              html
+          )
+
+          # 5. Build changelog <li> items from release body bullet points
+          items = []
+          for line in body.splitlines():
+              line = line.strip()
+              if re.match(r'^[-*]', line):
+                  line = re.sub(r'^[-*]\s*', '', line)
+                  # Convert **bold** to <strong>
+                  line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', line)
+                  # Convert `code` to <code>
+                  line = re.sub(r'`([^`]+)`', r'<code>\1</code>', line)
+                  items.append(f"                <li>{line}</li>")
+
+          if items:
+              items_html = "\n".join(items)
+              html = re.sub(
+                  r'(<ul class="tight">)\s*?(<li>.*?</li>\s*?)+(\s*</ul>)',
+                  rf'\1\n{items_html}\n              \3',
+                  html,
+                  count=1,
+                  flags=re.DOTALL
+              )
 
           with open("index.html", "w") as f:
               f.write(html)
