@@ -15,9 +15,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHorizontalScroll = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        setupMainMenu()
         setupWindow()
         setupKeyboardShortcuts()
         setupScrollInterception()
+    }
+
+    // MARK: Main menu (required for ⌘Q, ⌘H, etc.)
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu (Infinity Terminal)
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "About Infinity Terminal", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide Infinity Terminal", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Infinity Terminal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+
+        // Window menu
+        let windowMenuItem = NSMenuItem()
+        mainMenu.addItem(windowMenuItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+        windowMenuItem.submenu = windowMenu
+        NSApp.windowsMenu = windowMenu
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: Window
