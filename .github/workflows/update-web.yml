@@ -1,0 +1,91 @@
+name: Update website on release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version and release notes
+        id: info
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          # Fetch release body via GitHub API
+          BODY=$(gh api "repos/${{ github.repository }}/releases/tags/${GITHUB_REF_NAME}" --jq '.body')
+          echo "body<<ENDOFBODY" >> "$GITHUB_OUTPUT"
+          echo "$BODY" >> "$GITHUB_OUTPUT"
+          echo "ENDOFBODY" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build changelog HTML
+        id: changelog
+        run: |
+          # Extract bullet points from release body and convert to <li> tags
+          ITEMS=$(echo "${{ steps.info.outputs.body }}" \
+            | grep -E '^\s*[-*]' \
+            | sed 's/^\s*[-*]\s*//' \
+            | sed 's/\*\*\([^*]*\)\*\*/<strong>\1<\/strong>/g' \
+            | sed 's/`\([^`]*\)`/<code>\1<\/code>/g' \
+            | while IFS= read -r line; do echo "                <li>${line}</li>"; done)
+
+          echo "items<<ENDOFITEMS" >> "$GITHUB_OUTPUT"
+          echo "$ITEMS" >> "$GITHUB_OUTPUT"
+          echo "ENDOFITEMS" >> "$GITHUB_OUTPUT"
+
+      - name: Clone web repo
+        run: |
+          git clone https://x-access-token:${{ secrets.WEB_REPO_PAT }}@github.com/bujna94/infinityTerminalWeb.git web
+
+      - name: Update index.html
+        run: |
+          cd web
+          VERSION="${{ steps.info.outputs.version }}"
+          DATE="$(date -u +%Y-%m-%d)"
+          ITEMS='${{ steps.changelog.outputs.items }}'
+
+          # Update structured data version
+          sed -i "s/\"softwareVersion\": \"[^\"]*\"/\"softwareVersion\": \"${VERSION}\"/" index.html
+
+          # Update structured data date
+          sed -i "s/\"datePublished\": \"[^\"]*\"/\"datePublished\": \"${DATE}\"/" index.html
+
+          # Update download section version line
+          sed -i "s|<p>v[0-9.]*|<p>v${VERSION}|" index.html
+
+          # Update "What's New" heading
+          sed -i "s|What's New in v[0-9.]*|What's New in v${VERSION}|" index.html
+
+          # Replace changelog items (everything between the tight list ul tags)
+          python3 - "$ITEMS" <<'PYEOF'
+          import sys, re
+
+          items = sys.argv[1]
+          with open("index.html", "r") as f:
+              html = f.read()
+
+          # Replace the <ul class="tight"> contents in the What's New card
+          pattern = r'(<ul class="tight">)\s*(<li>.*?</li>\s*)*(\s*</ul>)'
+          replacement = r'\1\n' + items + r'\n              \3'
+          html = re.sub(pattern, replacement, html, count=1, flags=re.DOTALL)
+
+          with open("index.html", "w") as f:
+              f.write(html)
+          PYEOF
+
+      - name: Commit and push
+        run: |
+          cd web
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Auto-update to v${{ steps.info.outputs.version }}"
+            git push
+          fi
