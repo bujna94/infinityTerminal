@@ -61,6 +61,7 @@ final class TerminalSlot: NSView {
 
 struct TerminalPaneView: NSViewRepresentable {
     @ObservedObject var session: TerminalSession
+    var fontSize: CGFloat = 13
 
     func makeCoordinator() -> Coordinator {
         Coordinator(session: session)
@@ -80,6 +81,13 @@ struct TerminalPaneView: NSViewRepresentable {
             tv.nativeBackgroundColor = bg
             tv.layer?.backgroundColor = bg.cgColor
             tv.needsDisplay = true
+        }
+        // Apply font size changes
+        let newFont = NSFont(name: "Menlo", size: fontSize)
+            ?? NSFont(name: "Monaco", size: fontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        if tv.font.pointSize != fontSize {
+            tv.font = newFont
         }
     }
 
@@ -106,7 +114,6 @@ struct TerminalPaneView: NSViewRepresentable {
         tv.nativeBackgroundColor = NSColor(red: 0.059, green: 0.067, blue: 0.090, alpha: 1.0)
         tv.nativeForegroundColor = NSColor(red: 229.0/255.0, green: 233.0/255.0, blue: 240.0/255.0, alpha: 1.0)
 
-        let fontSize: CGFloat = 13
         tv.font =
             NSFont(name: "Menlo", size: fontSize)
             ?? NSFont(name: "Monaco", size: fontSize)
@@ -154,8 +161,8 @@ struct TerminalPaneView: NSViewRepresentable {
         func processTerminated(source: TerminalView, exitCode: Int32?) {
             DispatchQueue.main.async {
                 self.session.markExited(code: exitCode ?? 0)
-                // Auto-restart: reopen a fresh shell in the same pane (like the X button).
-                self.restartProcess()
+                // Ask the grid to replace this session with a fresh one (same as the X button).
+                NotificationCenter.default.post(name: .sessionExited, object: self.session.id)
             }
         }
 

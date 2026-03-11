@@ -176,6 +176,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "v":
                 NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
                 return nil
+            case "=", "+":   // ⌘= / ⌘+ — increase font size
+                DispatchQueue.main.async {
+                    self.gridModel.fontSize = min(self.gridModel.fontSize + 1, TerminalGridModel.fontSizeMax)
+                }
+                return nil
+            case "-":        // ⌘- — decrease font size
+                DispatchQueue.main.async {
+                    self.gridModel.fontSize = max(self.gridModel.fontSize - 1, TerminalGridModel.fontSizeMin)
+                }
+                return nil
+            case "0":        // ⌘0 — reset font size
+                DispatchQueue.main.async { self.gridModel.fontSize = 13 }
+                return nil
             default: break
             }
         }
@@ -259,6 +272,8 @@ extension Notification.Name {
     static let scrollColumnRight  = Notification.Name("InfinityTerminal.scrollColumnRight")
     /// Like jumpToStart but snaps instantly via NSScrollView (used after reset).
     static let jumpToStartInstant = Notification.Name("InfinityTerminal.jumpToStartInstant")
+    /// Posted by Coordinator when a PTY process exits; object is the session UUID.
+    static let sessionExited      = Notification.Name("InfinityTerminal.sessionExited")
 }
 
 // MARK: - Entry point

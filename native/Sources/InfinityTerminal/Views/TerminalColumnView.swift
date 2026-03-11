@@ -40,7 +40,7 @@ struct TerminalPaneWrapper: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            TerminalPaneView(session: session)
+            TerminalPaneView(session: session, fontSize: gridModel.fontSize)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if session.isExited {

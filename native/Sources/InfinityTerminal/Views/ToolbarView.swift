@@ -29,6 +29,8 @@ struct ToolbarView: View {
     @EnvironmentObject var gridModel: TerminalGridModel
     let onScrollToStart: () -> Void
 
+    private let fg = Color(red: 229.0/255.0, green: 233.0/255.0, blue: 240.0/255.0)
+
     var body: some View {
         HStack(spacing: 0) {
             // Spacer clears the traffic-light buttons (zoom right edge ≈ 54pt)
@@ -81,6 +83,42 @@ struct ToolbarView: View {
                 ) {
                     gridModel.toggleShortcuts()
                 }
+
+                // Font size controls
+                HStack(spacing: 0) {
+                    Button(action: {
+                        gridModel.fontSize = max(gridModel.fontSize - 1, TerminalGridModel.fontSizeMin)
+                    }) {
+                        Text("−")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundColor(fg)
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+
+                    Text("\(Int(gridModel.fontSize))px")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundColor(fg)
+                        .frame(width: 32)
+
+                    Button(action: {
+                        gridModel.fontSize = min(gridModel.fontSize + 1, TerminalGridModel.fontSizeMax)
+                    }) {
+                        Text("+")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundColor(fg)
+                            .frame(width: 20, height: 20)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 4)
+                .frame(height: 20)
+                .background(Color(red: 0.086, green: 0.102, blue: 0.141))
+                .cornerRadius(5)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
             }
             .padding(.trailing, 12)
         }
