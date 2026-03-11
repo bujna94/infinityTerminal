@@ -111,15 +111,20 @@ chmod -R u+w "${APP_PATH}"
 xattr -cr "${APP_PATH}" 2>/dev/null || true
 
 # ── Code sign (Hardened Runtime + Developer ID) ───────────────────────────────
-echo "→ Signing…"
-codesign --force --deep --options runtime \
-    --entitlements "${ENTITLEMENTS_FILE}" \
-    --sign "${SIGN_ID}" \
-    "${APP_PATH}"
+if security find-identity -v -p codesigning | grep -q "${SIGN_ID}"; then
+    echo "→ Signing…"
+    codesign --force --deep --options runtime \
+        --entitlements "${ENTITLEMENTS_FILE}" \
+        --sign "${SIGN_ID}" \
+        "${APP_PATH}"
 
-echo "→ Verifying signature…"
-codesign --verify --deep --strict "${APP_PATH}" && echo "   Signature OK"
-spctl --assess --type execute "${APP_PATH}" 2>&1 || echo "   (spctl: not yet notarized)"
+    echo "→ Verifying signature…"
+    codesign --verify --deep --strict "${APP_PATH}" && echo "   Signature OK"
+    spctl --assess --type execute "${APP_PATH}" 2>&1 || echo "   (spctl: not yet notarized)"
+else
+    echo "→ Signing with ad-hoc identity (Developer ID not found)…"
+    codesign --force --deep --sign - "${APP_PATH}"
+fi
 
 # ── DMG ───────────────────────────────────────────────────────────────────────
 if [[ "$1" == "--dmg" ]]; then
@@ -170,7 +175,10 @@ tell application "Finder"
 end tell
 APPLESCRIPT
 
-    hdiutil detach "${MOUNT_DIR}"
+    # Ensure Finder releases the volume before detaching
+    osascript -e "tell application \"Finder\" to eject disk \"${VOLNAME}\"" 2>/dev/null || true
+    sleep 1
+    hdiutil detach "${MOUNT_DIR}" 2>/dev/null || hdiutil detach "${MOUNT_DIR}" -force 2>/dev/null || true
 
     # Convert to compressed read-only DMG
     hdiutil convert "${RW_DMG}" -format UDZO -imagekey zlib-level=9 -o "${DMG_PATH}"

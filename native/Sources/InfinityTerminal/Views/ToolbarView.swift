@@ -100,7 +100,7 @@ struct ToolbarView: View {
 
     @ViewBuilder
     private var appLogoImage: some View {
-        if let url = Bundle.module.url(forResource: "appLogo", withExtension: "png"),
+        if let url = Bundle.appResources.url(forResource: "appLogo", withExtension: "png"),
            let nsImage = NSImage(contentsOf: url) {
             Image(nsImage: nsImage)
                 .resizable()
