@@ -10,10 +10,38 @@ import AppKit
 final class InfinityTerminalNSView: LocalProcessTerminalView {
 
     var onDataReceived: ((ArraySlice<UInt8>) -> Void)?
+    /// Called on the main thread when the child shell process exits.
+    var onProcessExited: (() -> Void)?
+
+    private var pidMonitor: DispatchSourceProcess?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
         onDataReceived?(slice)
+    }
+
+    /// Start monitoring the child PID ourselves via a DispatchSource.
+    /// SwiftTerm's weak-delegate chain is unreliable with SwiftUI, so we
+    /// bypass it entirely and watch the PID directly.
+    func monitorProcess() {
+        pidMonitor?.cancel()
+        pidMonitor = nil
+
+        let pid = process.shellPid
+        guard pid > 0 else { return }
+
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+        source.setEventHandler { [weak self] in
+            self?.pidMonitor?.cancel()
+            self?.pidMonitor = nil
+            self?.onProcessExited?()
+        }
+        source.resume()
+        pidMonitor = source
+    }
+
+    deinit {
+        pidMonitor?.cancel()
     }
 
     // Right-click context menu with Copy / Paste / Select All
@@ -62,6 +90,7 @@ final class TerminalSlot: NSView {
 struct TerminalPaneView: NSViewRepresentable {
     @ObservedObject var session: TerminalSession
     var fontSize: CGFloat = 13
+    var onProcessExit: (() -> Void)?
 
     func makeCoordinator() -> Coordinator {
         Coordinator(session: session)
@@ -93,21 +122,17 @@ struct TerminalPaneView: NSViewRepresentable {
 
     // MARK: - PTY view lifecycle
 
-    /// Returns the cached live terminal view for this session, or creates a new one.
-    /// The real `InfinityTerminalNSView` is stored on the session so it survives
-    /// when SwiftUI destroys and re-creates the representable (e.g. left/right swap).
     private func acquireTermView(for context: Context) -> InfinityTerminalNSView {
         if let existing = session.cachedTermView as? InfinityTerminalNSView {
-            // Pane moved to a different column — detach from old slot and re-wire coordinator.
             existing.removeFromSuperview()
             existing.processDelegate = context.coordinator
             context.coordinator.termView = existing
             existing.onDataReceived = makeDataHandler(coordinator: context.coordinator)
+            existing.onProcessExited = onProcessExit
             session.restartHandler = makeRestartHandler(coordinator: context.coordinator)
             return existing
         }
 
-        // First time — create, configure, and cache the view.
         let tv = InfinityTerminalNSView(frame: .zero)
         session.cachedTermView = tv
 
@@ -122,10 +147,12 @@ struct TerminalPaneView: NSViewRepresentable {
         tv.processDelegate = context.coordinator
         context.coordinator.termView = tv
         tv.onDataReceived = makeDataHandler(coordinator: context.coordinator)
+        tv.onProcessExited = onProcessExit
 
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let home  = FileManager.default.homeDirectoryForCurrentUser.path
         tv.startProcess(executable: shell, args: [], environment: nil, execName: nil, currentDirectory: home)
+        tv.monitorProcess()
 
         session.restartHandler = makeRestartHandler(coordinator: context.coordinator)
         return tv
@@ -155,17 +182,8 @@ struct TerminalPaneView: NSViewRepresentable {
         }
 
         func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
-
         func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
-
-        func processTerminated(source: TerminalView, exitCode: Int32?) {
-            DispatchQueue.main.async {
-                self.session.markExited(code: exitCode ?? 0)
-                // Ask the grid to replace this session with a fresh one (same as the X button).
-                NotificationCenter.default.post(name: .sessionExited, object: self.session.id)
-            }
-        }
-
+        func processTerminated(source: TerminalView, exitCode: Int32?) {}
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
         func restartProcess() {
@@ -174,6 +192,7 @@ struct TerminalPaneView: NSViewRepresentable {
             let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
             let home  = FileManager.default.homeDirectoryForCurrentUser.path
             tv.startProcess(executable: shell, args: [], environment: nil, execName: nil, currentDirectory: home)
+            tv.monitorProcess()
         }
     }
 }

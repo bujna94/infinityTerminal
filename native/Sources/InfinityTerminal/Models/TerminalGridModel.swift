@@ -17,20 +17,7 @@ class TerminalGridModel: ObservableObject {
         columns.reduce(0) { $0 + $1.sessions.count }
     }
 
-    private var observers: [Any] = []
-
-    init() {
-        reset()
-        let obs = NotificationCenter.default.addObserver(
-            forName: .sessionExited, object: nil, queue: .main
-        ) { [weak self] note in
-            guard let self, let id = note.object as? UUID else { return }
-            self.replaceSession(id: id)
-        }
-        observers.append(obs)
-    }
-
-    deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+    init() { reset() }
 
     // MARK: - Column operations
 
@@ -47,16 +34,6 @@ class TerminalGridModel: ObservableObject {
     func toggleShortcuts() { showShortcuts.toggle() }
 
     // MARK: - Pane operations
-
-    /// Replace an exited session with a fresh one (auto-restart on exit).
-    func replaceSession(id: UUID) {
-        for col in columns {
-            if let idx = col.sessions.firstIndex(where: { $0.id == id }) {
-                col.sessions[idx] = TerminalSession()
-                return
-            }
-        }
-    }
 
     /// Close a pane.
     /// ≤ 4 panes: replace with a fresh session (new process starts in the same slot).

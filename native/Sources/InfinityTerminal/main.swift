@@ -272,8 +272,6 @@ extension Notification.Name {
     static let scrollColumnRight  = Notification.Name("InfinityTerminal.scrollColumnRight")
     /// Like jumpToStart but snaps instantly via NSScrollView (used after reset).
     static let jumpToStartInstant = Notification.Name("InfinityTerminal.jumpToStartInstant")
-    /// Posted by Coordinator when a PTY process exits; object is the session UUID.
-    static let sessionExited      = Notification.Name("InfinityTerminal.sessionExited")
 }
 
 // MARK: - Entry point
