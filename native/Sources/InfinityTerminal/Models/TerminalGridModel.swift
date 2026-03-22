@@ -10,6 +10,9 @@ class TerminalGridModel: ObservableObject {
     @Published var minimapHeight: CGFloat = 84
     @Published var fontSize: CGFloat = 13
 
+    /// ID of the first column created at launch / after reset — the "Home" anchor.
+    private(set) var homeColumnID: UUID?
+
     static let fontSizeMin: CGFloat = 9
     static let fontSizeMax: CGFloat = 28
 
@@ -29,7 +32,10 @@ class TerminalGridModel: ObservableObject {
         columns.remove(at: index)
     }
 
-    func reset() { columns = [TerminalColumn(), TerminalColumn()] }
+    func reset() {
+        columns = [TerminalColumn(), TerminalColumn()]
+        homeColumnID = columns.first?.id
+    }
     func toggleMinimap()   { showMinimap.toggle() }
     func toggleShortcuts() { showShortcuts.toggle() }
 

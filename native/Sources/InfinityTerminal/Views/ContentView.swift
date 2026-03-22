@@ -44,6 +44,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .jumpToStart)) { _ in
             jumpToStart()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .jumpToHome)) { _ in
+            jumpToHome()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .jumpToStartInstant)) { _ in
             // After reset: snap instantly via NSScrollView so there's no reversed scroll animation.
             if let sv = nativeScroll {
@@ -69,7 +72,7 @@ struct ContentView: View {
 
     private func mainLayout(geo: GeometryProxy) -> some View {
         VStack(spacing: 0) {
-            ToolbarView { jumpToStart() }
+            ToolbarView { jumpToHome() }
 
             gridRow(geo: geo)
                 .frame(maxHeight: .infinity)
@@ -186,6 +189,16 @@ struct ContentView: View {
             scrollAnchor = .leading
             scrollTarget = first.id
         }
+    }
+
+    private func jumpToHome() {
+        guard let homeID = gridModel.homeColumnID,
+              gridModel.columns.contains(where: { $0.id == homeID }) else {
+            jumpToStart()
+            return
+        }
+        scrollAnchor = .leading
+        scrollTarget = homeID
     }
 
     private func jumpToEnd() {

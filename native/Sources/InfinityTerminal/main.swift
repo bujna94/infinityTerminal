@@ -139,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }; return nil
             case "m": DispatchQueue.main.async { self.gridModel.toggleMinimap() }; return nil
             case "h": DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .jumpToStart, object: nil)
+                NotificationCenter.default.post(name: .jumpToHome, object: nil)
             }; return nil
             default: break
             }
@@ -268,6 +268,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension Notification.Name {
     static let jumpToStart        = Notification.Name("InfinityTerminal.jumpToStart")
     static let jumpToEnd          = Notification.Name("InfinityTerminal.jumpToEnd")
+    static let jumpToHome         = Notification.Name("InfinityTerminal.jumpToHome")
     static let scrollColumnLeft   = Notification.Name("InfinityTerminal.scrollColumnLeft")
     static let scrollColumnRight  = Notification.Name("InfinityTerminal.scrollColumnRight")
     /// Like jumpToStart but snaps instantly via NSScrollView (used after reset).
