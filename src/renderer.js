@@ -142,12 +142,9 @@ let _ovInvalidateTimer = null; // coalesced refresh timer
 // Track the most recently focused terminal (for copy/paste)
 let _activeTermRef = null; // { id, term }
 
-// Host coloring for SSH sessions
 const DEFAULT_BG = '#0f1117';
-const hostColorMap = new Map(); // host -> color (hex)
-const usedColors = new Set();
+
 function hslToHex(h, s, l) {
-  // h in [0,360), s,l in [0,1]
   s = Math.max(0, Math.min(1, s));
   l = Math.max(0, Math.min(1, l));
   const c = (1 - Math.abs(2 * l - 1)) * s;
@@ -166,31 +163,6 @@ function hslToHex(h, s, l) {
   const b = Math.round((b1 + m) * 255);
   const toHex = (n) => n.toString(16).padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-}
-function pickColorForHost(host) {
-  const key = String(host || '').trim().toLowerCase();
-  if (hostColorMap.has(key)) return hostColorMap.get(key);
-  // 32-bit FNV-1a hash for stable seed
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < key.length; i++) {
-    h ^= key.charCodeAt(i);
-    h = (h * 16777619) >>> 0;
-  }
-  // Map hash to hue, with good separation across the wheel
-  let hue = h % 360;
-  const saturation = 0.35; // keep dark but distinct
-  const lightness = 0.17;  // dark backgrounds for contrast with light fg
-  let color = hslToHex(hue, saturation, lightness);
-  // Avoid rare collisions by nudging hue until we hit an unused color
-  let tries = 0;
-  while (usedColors.has(color) && tries < 12) {
-    hue = (hue + 37) % 360; // add a prime-ish step
-    color = hslToHex(hue, saturation, lightness);
-    tries++;
-  }
-  usedColors.add(color);
-  hostColorMap.set(key, color);
-  return color;
 }
 
 // Single IPC listeners with per-terminal dispatch to avoid MaxListeners warnings
@@ -332,142 +304,99 @@ function createTerminal(paneEl) {
   } catch (_) {}
 
   // Register handlers in maps; single global IPC listeners dispatch here
-  // Track SSH connection lifecycle to color backgrounds per host
-  let currentHost = null;      // active connected host
-  let pendingHost = null;      // host we are attempting to connect to
-  const FAIL_PATTERNS = [
-    /permission denied/i,
-    /could not resolve hostname/i,
-    /name or service not known/i,
-    /connection timed out/i,
-    /operation timed out/i,
-    /no route to host/i,
-    /connection refused/i,
-    /kex_exchange_identification/i,
-    /host key verification failed/i,
-    /too many authentication failures/i,
-    /ssh:\s*connect to host .* port .*:/i,
-  ];
-  const CLOSE_PATTERNS = [
-    /connection to .* closed/i,
-    /shared connection to .* closed/i,
-    /connection closed by remote host/i,
-    /connection reset by peer/i,
-    /^logout\b/i,
-  ];
-  const SUCCESS_PATTERNS = [
-    /last login/i,
-    /welcome to/i,
-  ];
-  function onConnected(host) {
-    currentHost = host;
-    pendingHost = null;
-    const color = pickColorForHost(host);
-    applyBackground(color);
-  }
-  function onDisconnected() {
-    currentHost = null;
-    pendingHost = null;
-    applyBackground(DEFAULT_BG);
-  }
   dataHandlers.set(id, (data) => {
     term.write(data);
-    try {
-      if (typeof data === 'string') {
-        const s = data;
-        // Failure while connecting
-        if (pendingHost && FAIL_PATTERNS.some(r => r.test(s))) {
-          pendingHost = null;
-          applyBackground(DEFAULT_BG);
-        }
-        // Connection closed
-        if (currentHost && CLOSE_PATTERNS.some(r => r.test(s))) {
-          onDisconnected();
-        }
-        // Success cues
-        if (pendingHost && SUCCESS_PATTERNS.some(r => r.test(s))) {
-          onConnected(pendingHost);
-        }
-      }
-    } catch (_) {}
     scheduleOverviewRefresh();
   });
   exitHandlers.set(id, (exitCode) => {
     term.write(`\r\n\x1b[31m[process exited with code ${exitCode}]\x1b[0m\r\n`);
     exited = true;
-    // Reset to local style
-    try { applyBackground(DEFAULT_BG); currentHost = null; pendingHost = null; } catch (_) {}
     scheduleOverviewRefresh();
     showRestartOverlay(`Process exited (${exitCode}). Press Enter to restart.`);
   });
 
-  // Capture typed lines to detect ssh commands
-  let typedLine = '';
-  function parseSshHostFromCommand(cmd) {
-    const s = cmd.trim();
-    if (!s) return null;
-    const tokens = s.split(/\s+/);
-    if (!tokens.length || tokens[0] !== 'ssh') return null;
-    let host = null;
-    for (let i = 1; i < tokens.length; i++) {
-      const t = tokens[i];
-      if (t.startsWith('-')) {
-        if (t === '-p' && (i + 1) < tokens.length) { i++; continue; }
-        continue;
-      }
-      // Found the destination token
-      host = t.includes('@') ? t.split('@').pop() : t;
-      // Strip any trailing colon or path
-      host = host.replace(/:.*$/, '');
-      break;
-    }
-    return host || null;
-  }
   function applyBackground(color) {
     const theme = Object.assign({}, term.options?.theme || {}, { background: color });
     try { term.setOption('theme', theme); } catch (_) { try { term.options.theme = theme; } catch (_) {} }
     try { paneEl.style.setProperty('--term-bg', color); } catch (_) {}
   }
+
+  // Hue picker UI for this pane
+  let huePickerEl = null;
+  function createHueButton() {
+    const btn = document.createElement('button');
+    btn.className = 'hue-btn';
+    btn.title = 'Background color';
+    // Conic gradient circle via CSS
+    btn.innerHTML = '<span class="hue-circle"></span>';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (huePickerEl && huePickerEl.parentElement) {
+        huePickerEl.remove();
+        huePickerEl = null;
+        return;
+      }
+      showHuePicker(btn);
+    });
+    return btn;
+  }
+  const HUE_SWATCHES = [
+    { label: 'Default',  color: null,                       preview: DEFAULT_BG },
+    { label: 'Red',      color: hslToHex(0,   0.40, 0.18), preview: hslToHex(0,   0.65, 0.40) },
+    { label: 'Orange',   color: hslToHex(30,  0.40, 0.18), preview: hslToHex(30,  0.65, 0.40) },
+    { label: 'Yellow',   color: hslToHex(50,  0.35, 0.18), preview: hslToHex(50,  0.60, 0.40) },
+    { label: 'Green',    color: hslToHex(120, 0.35, 0.16), preview: hslToHex(120, 0.55, 0.38) },
+    { label: 'Teal',     color: hslToHex(170, 0.35, 0.16), preview: hslToHex(170, 0.55, 0.38) },
+    { label: 'Cyan',     color: hslToHex(190, 0.35, 0.17), preview: hslToHex(190, 0.55, 0.38) },
+    { label: 'Blue',     color: hslToHex(220, 0.40, 0.18), preview: hslToHex(220, 0.60, 0.40) },
+    { label: 'Indigo',   color: hslToHex(250, 0.35, 0.18), preview: hslToHex(250, 0.55, 0.40) },
+    { label: 'Purple',   color: hslToHex(280, 0.35, 0.18), preview: hslToHex(280, 0.55, 0.40) },
+    { label: 'Magenta',  color: hslToHex(310, 0.35, 0.18), preview: hslToHex(310, 0.55, 0.40) },
+    { label: 'Rose',     color: hslToHex(340, 0.35, 0.18), preview: hslToHex(340, 0.60, 0.40) },
+  ];
+  function showHuePicker(anchorBtn) {
+    if (huePickerEl) { huePickerEl.remove(); huePickerEl = null; }
+    const picker = document.createElement('div');
+    picker.className = 'hue-picker-popover';
+
+    HUE_SWATCHES.forEach(({ label, color, preview }) => {
+      const btn = document.createElement('button');
+      btn.className = 'hue-swatch';
+      btn.title = label;
+      btn.style.background = preview;
+      btn.addEventListener('click', () => {
+        applyBackground(color || DEFAULT_BG);
+        picker.remove();
+        huePickerEl = null;
+      });
+      picker.appendChild(btn);
+    });
+
+    paneEl.appendChild(picker);
+    huePickerEl = picker;
+
+    // Close on outside click
+    const closeHandler = (e) => {
+      if (!picker.contains(e.target) && e.target !== anchorBtn && !anchorBtn.contains(e.target)) {
+        picker.remove();
+        huePickerEl = null;
+        document.removeEventListener('mousedown', closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener('mousedown', closeHandler), 0);
+  }
+  const _hueBtn = createHueButton();
+
   term.onData((data) => {
     if (exited) {
-      // Wait for Enter to restart a local shell in this pane
       if (typeof data === 'string' && (data.includes('\r') || data.includes('\n'))) {
         hideRestartOverlay();
         exited = false;
-        typedLine = '';
-        pendingHost = null;
-        currentHost = null;
-        applyBackground(DEFAULT_BG);
         runLocalShell();
       }
-      return; // swallow keystrokes while exited
+      return;
     }
     pty.write(id, data);
-    // Build a simple editable command line buffer
-    try {
-      if (typeof data === 'string') {
-        for (let i = 0; i < data.length; i++) {
-          const ch = data[i];
-          if (ch === '\r' || ch === '\n') {
-            // Evaluate the command line
-            const host = parseSshHostFromCommand(typedLine);
-            if (host) {
-              // Begin connection attempt; apply color only after strict success
-              pendingHost = host;
-            }
-            typedLine = '';
-          } else if (ch === '\u0008' || ch === '\b' || ch === '\u007f') {
-            // backspace
-            typedLine = typedLine.slice(0, -1);
-          } else if (ch >= ' ' && ch <= '~') {
-            // printable
-            typedLine += ch;
-          } else {
-            // ignore other control codes
-          }
-        }
-      }
-    } catch (_) {}
     scheduleOverviewRefresh();
   });
 
@@ -520,12 +449,11 @@ function createTerminal(paneEl) {
     if (!exited) return;
     hideRestartOverlay();
     exited = false;
-    typedLine = '';
-    pendingHost = null;
-    currentHost = null;
-    applyBackground(DEFAULT_BG);
     runLocalShell();
   });
+
+  // Append hue button to the pane
+  paneEl.appendChild(_hueBtn);
 
   return { id, term, runLocalShell, fit, focus, dispose, pane: paneEl };
 }

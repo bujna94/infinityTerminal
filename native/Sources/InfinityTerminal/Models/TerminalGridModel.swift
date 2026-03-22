@@ -35,28 +35,14 @@ class TerminalGridModel: ObservableObject {
 
     // MARK: - Pane operations
 
-    /// Close a pane.
-    /// ≤ 4 panes: replace with a fresh session (new process starts in the same slot).
-    /// > 4 panes: remove the pane; collapse the column if it becomes empty.
+    /// Close a pane — always replace with a fresh session so columns keep two panes.
     func closePane(columnIndex: Int, sessionIndex: Int) {
         guard columnIndex < columns.count else { return }
         let col = columns[columnIndex]
         guard sessionIndex < col.sessions.count else { return }
-
-        if totalPaneCount <= 4 {
-            // Replacing the session object gives it a new ID → SwiftUI calls makeNSView
-            // → a fresh shell process starts in the same visual slot.
-            col.sessions[sessionIndex] = TerminalSession()
-            return
-        }
-
-        withAnimation(.spring(duration: 0.28)) {
-            col.sessions.remove(at: sessionIndex)
-            if col.sessions.isEmpty {
-                columns.remove(at: columnIndex)
-                while columns.count < 2 { columns.append(TerminalColumn()) }
-            }
-        }
+        // Replacing the session object gives it a new ID → SwiftUI calls makeNSView
+        // → a fresh shell process starts in the same visual slot.
+        col.sessions[sessionIndex] = TerminalSession()
     }
 
     /// Swap the two sessions within a column (top ↔ bottom).

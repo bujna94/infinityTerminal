@@ -127,7 +127,6 @@ struct TerminalPaneView: NSViewRepresentable {
             existing.removeFromSuperview()
             existing.processDelegate = context.coordinator
             context.coordinator.termView = existing
-            existing.onDataReceived = makeDataHandler(coordinator: context.coordinator)
             existing.onProcessExited = onProcessExit
             session.restartHandler = makeRestartHandler(coordinator: context.coordinator)
             return existing
@@ -146,7 +145,6 @@ struct TerminalPaneView: NSViewRepresentable {
 
         tv.processDelegate = context.coordinator
         context.coordinator.termView = tv
-        tv.onDataReceived = makeDataHandler(coordinator: context.coordinator)
         tv.onProcessExited = onProcessExit
 
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
@@ -156,15 +154,6 @@ struct TerminalPaneView: NSViewRepresentable {
 
         session.restartHandler = makeRestartHandler(coordinator: context.coordinator)
         return tv
-    }
-
-    private func makeDataHandler(coordinator: Coordinator) -> (ArraySlice<UInt8>) -> Void {
-        { [weak coordinator] slice in
-            guard let coordinator else { return }
-            if let text = String(bytes: slice, encoding: .utf8) {
-                DispatchQueue.main.async { coordinator.session.processOutput(text) }
-            }
-        }
     }
 
     private func makeRestartHandler(coordinator: Coordinator) -> () -> Void {

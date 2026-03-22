@@ -1,5 +1,106 @@
 import SwiftUI
 
+// MARK: - Hue wheel shape (conic gradient ring)
+
+/// A small conic-gradient circle used as a button icon for the background color picker.
+struct HueCircleIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(
+                AngularGradient(
+                    gradient: Gradient(colors: [
+                        Color(hue: 0.0,  saturation: 0.7, brightness: 0.85),
+                        Color(hue: 0.17, saturation: 0.7, brightness: 0.85),
+                        Color(hue: 0.33, saturation: 0.7, brightness: 0.85),
+                        Color(hue: 0.5,  saturation: 0.7, brightness: 0.85),
+                        Color(hue: 0.67, saturation: 0.7, brightness: 0.85),
+                        Color(hue: 0.83, saturation: 0.7, brightness: 0.85),
+                        Color(hue: 1.0,  saturation: 0.7, brightness: 0.85),
+                    ]),
+                    center: .center
+                )
+            )
+            .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Hue picker popover content
+
+struct HuePickerPopover: View {
+    @ObservedObject var session: TerminalSession
+    @Binding var isPresented: Bool
+
+    // (label, applied terminal bg, bright preview for the swatch circle)
+    private static let swatches: [(String, NSColor?, Color)] = [
+        ("Default",  nil,
+         Color(red: 0.059, green: 0.067, blue: 0.090)),
+        ("Red",
+         NSColor(hue: 0.0,       saturation: 0.40, brightness: 0.18, alpha: 1),
+         Color(hue: 0.0,         saturation: 0.65, brightness: 0.55)),
+        ("Orange",
+         NSColor(hue: 30.0/360,  saturation: 0.40, brightness: 0.18, alpha: 1),
+         Color(hue: 30.0/360,    saturation: 0.65, brightness: 0.55)),
+        ("Yellow",
+         NSColor(hue: 50.0/360,  saturation: 0.35, brightness: 0.18, alpha: 1),
+         Color(hue: 50.0/360,    saturation: 0.60, brightness: 0.55)),
+        ("Green",
+         NSColor(hue: 120.0/360, saturation: 0.35, brightness: 0.16, alpha: 1),
+         Color(hue: 120.0/360,   saturation: 0.55, brightness: 0.50)),
+        ("Teal",
+         NSColor(hue: 170.0/360, saturation: 0.35, brightness: 0.16, alpha: 1),
+         Color(hue: 170.0/360,   saturation: 0.55, brightness: 0.50)),
+        ("Cyan",
+         NSColor(hue: 190.0/360, saturation: 0.35, brightness: 0.17, alpha: 1),
+         Color(hue: 190.0/360,   saturation: 0.55, brightness: 0.50)),
+        ("Blue",
+         NSColor(hue: 220.0/360, saturation: 0.40, brightness: 0.18, alpha: 1),
+         Color(hue: 220.0/360,   saturation: 0.60, brightness: 0.55)),
+        ("Indigo",
+         NSColor(hue: 250.0/360, saturation: 0.35, brightness: 0.18, alpha: 1),
+         Color(hue: 250.0/360,   saturation: 0.55, brightness: 0.55)),
+        ("Purple",
+         NSColor(hue: 280.0/360, saturation: 0.35, brightness: 0.18, alpha: 1),
+         Color(hue: 280.0/360,   saturation: 0.55, brightness: 0.55)),
+        ("Magenta",
+         NSColor(hue: 310.0/360, saturation: 0.35, brightness: 0.18, alpha: 1),
+         Color(hue: 310.0/360,   saturation: 0.55, brightness: 0.55)),
+        ("Rose",
+         NSColor(hue: 340.0/360, saturation: 0.35, brightness: 0.18, alpha: 1),
+         Color(hue: 340.0/360,   saturation: 0.60, brightness: 0.55)),
+    ]
+
+    private var currentColor: NSColor? { session.userBackgroundColor }
+
+    var body: some View {
+        let cols = Array(repeating: GridItem(.fixed(28), spacing: 6), count: 4)
+        LazyVGrid(columns: cols, spacing: 6) {
+            ForEach(Array(Self.swatches.enumerated()), id: \.offset) { _, swatch in
+                let (label, applied, preview) = swatch
+                let isSelected = (applied == nil && currentColor == nil)
+                    || (applied != nil && currentColor != nil
+                        && abs(applied!.hueComponent - currentColor!.hueComponent) < 0.01)
+                Button {
+                    session.userBackgroundColor = applied
+                    isPresented = false
+                } label: {
+                    Circle()
+                        .fill(preview)
+                        .frame(width: 24, height: 24)
+                        .overlay(
+                            Circle()
+                                .stroke(isSelected ? Color.white : Color.white.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(label)
+            }
+        }
+        .padding(10)
+    }
+}
+
 // MARK: - Exit overlay
 
 struct ExitOverlayView: View {
@@ -37,10 +138,13 @@ struct TerminalPaneWrapper: View {
     let sessionIndex: Int
 
     @State private var isHovered = false
+    @State private var showColorPicker = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            TerminalPaneView(session: session, fontSize: gridModel.fontSize)
+            TerminalPaneView(session: session, fontSize: gridModel.fontSize, onProcessExit: {
+                    gridModel.closePane(columnIndex: columnIndex, sessionIndex: sessionIndex)
+                })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if session.isExited {
@@ -50,7 +154,7 @@ struct TerminalPaneWrapper: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if isHovered {
+            if isHovered || showColorPicker {
                 paneControls
                     .padding(6)
                     .transition(.opacity)
@@ -58,6 +162,7 @@ struct TerminalPaneWrapper: View {
         }
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.easeInOut(duration: 0.15), value: showColorPicker)
     }
 
     // MARK: Control strip
@@ -80,6 +185,19 @@ struct TerminalPaneWrapper: View {
             if (col?.sessions.count ?? 0) == 2 {
                 ctrlBtn("⇅", help: "Swap top / bottom") { gridModel.swapVertically(columnIndex: columnIndex) }
             }
+
+            // Hue circle — background color picker
+            Button(action: { showColorPicker.toggle() }) {
+                HueCircleIcon(size: 12)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Background color")
+            .popover(isPresented: $showColorPicker, arrowEdge: .bottom) {
+                HuePickerPopover(session: session, isPresented: $showColorPicker)
+            }
+
             ctrlBtn("✕", help: "Close pane") {
                 gridModel.closePane(columnIndex: columnIndex, sessionIndex: sessionIndex)
             }
@@ -119,7 +237,7 @@ struct TerminalColumnView: View {
                     .overlay(alignment: .bottom) {
                         if idx < column.sessions.count - 1 {
                             Rectangle()
-                                .fill(Color.white.opacity(0.06))
+                                .fill(Color.white.opacity(0.10))
                                 .frame(height: 1)
                         }
                     }
@@ -128,7 +246,7 @@ struct TerminalColumnView: View {
         .background(Color(red: 0.059, green: 0.067, blue: 0.090))
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.white.opacity(0.06))
+                .fill(Color.white.opacity(0.10))
                 .frame(width: 1)
         }
     }
