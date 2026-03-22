@@ -10,6 +10,11 @@
 #   APPLE_TEAM     – your Team ID (334EJ7NNV2)
 set -e
 
+# Load .env if present (APPLE_ID, APPLE_PASSWORD, APPLE_TEAM)
+if [ -f "$(dirname "$0")/.env" ]; then
+    set -a; source "$(dirname "$0")/.env"; set +a
+fi
+
 PRODUCT="InfinityTerminal"
 APP="${PRODUCT}.app"
 DMG="${PRODUCT}.dmg"
