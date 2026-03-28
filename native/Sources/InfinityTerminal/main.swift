@@ -73,11 +73,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.tabbingMode = .disallowed
         window.backgroundColor = NSColor(red: 0.059, green: 0.067, blue: 0.090, alpha: 1.0)
 
-        // App icon – loaded from SPM bundle resources
-        if let url = Bundle.appResources.url(forResource: "AppIcon", withExtension: "icns"),
-           let icon = NSImage(contentsOf: url) {
-            NSApp.applicationIconImage = icon
-        }
 
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.sizingOptions = []
