@@ -2,7 +2,7 @@
 # Builds, signs, notarizes, and packages Infinity Terminal as a DMG.
 # Usage:  ./build-app.sh [--dmg]
 # Output: .build/InfinityTerminal.app  (always)
-#         .build/InfinityTerminal.dmg  (with --dmg flag)
+#         .build/InfinityTerminal-<version>.dmg  (with --dmg flag)
 #
 # Notarization requires:
 #   APPLE_ID       – your Apple ID email
@@ -16,8 +16,10 @@ if [ -f "$(dirname "$0")/.env" ]; then
 fi
 
 PRODUCT="InfinityTerminal"
+VERSION="1.0.9"
+BUILD_NUMBER="10"
 APP="${PRODUCT}.app"
-DMG="${PRODUCT}.dmg"
+DMG="${PRODUCT}-${VERSION}.dmg"
 BUILD_DIR=".build/release"
 APP_PATH=".build/${APP}"
 DMG_PATH=".build/${DMG}"
@@ -70,7 +72,7 @@ ICON_SRC="${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle/AppIcon.icns"
 [ -f "${ICON_SRC}" ] && cp "${ICON_SRC}" "${APP_PATH}/Contents/Resources/AppIcon.icns"
 
 # ── Info.plist ────────────────────────────────────────────────────────────────
-cat > "${APP_PATH}/Contents/Info.plist" << 'PLIST'
+cat > "${APP_PATH}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -89,9 +91,9 @@ cat > "${APP_PATH}/Contents/Info.plist" << 'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.9</string>
+    <string>${VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>10</string>
+    <string>${BUILD_NUMBER}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key>
