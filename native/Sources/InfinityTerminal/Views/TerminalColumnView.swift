@@ -142,8 +142,8 @@ struct TerminalPaneWrapper: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            TerminalPaneView(session: session, fontSize: gridModel.fontSize, onProcessExit: {
-                    gridModel.closePane(columnIndex: columnIndex, sessionIndex: sessionIndex)
+            TerminalPaneView(session: session, fontSize: gridModel.fontSize, onProcessExit: { [session, gridModel] in
+                    gridModel.closePane(session: session)
                 })
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 

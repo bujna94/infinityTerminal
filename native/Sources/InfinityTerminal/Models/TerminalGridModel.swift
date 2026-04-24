@@ -51,6 +51,19 @@ class TerminalGridModel: ObservableObject {
         col.sessions[sessionIndex] = TerminalSession()
     }
 
+    /// Close the pane hosting `session`, wherever it currently lives.
+    /// Exit handlers on cached NSViews are wired up once and never refreshed
+    /// by `updateNSView`, so they must not rely on positional indices that
+    /// become stale after a swap.
+    func closePane(session: TerminalSession) {
+        for col in columns {
+            if let idx = col.sessions.firstIndex(where: { $0.id == session.id }) {
+                col.sessions[idx] = TerminalSession()
+                return
+            }
+        }
+    }
+
     /// Swap the two sessions within a column (top ↔ bottom).
     /// SwiftUI's ForEach moves views in-place, preserving NSViews and PTY processes.
     func swapVertically(columnIndex: Int) {
