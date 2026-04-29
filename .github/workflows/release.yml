@@ -6,6 +6,12 @@ on:
       - "v*.*.*"
   workflow_dispatch: {}
 
+# Required so softprops/action-gh-release can create the GitHub Release.
+# Without this, the default GITHUB_TOKEN is read-only on modern repos and the
+# release POST returns 403 "Resource not accessible by integration".
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
@@ -24,20 +30,21 @@ jobs:
       - name: Build + sign + notarize
         # electron-builder picks up signing automatically from CSC_LINK /
         # CSC_KEY_PASSWORD and notarizes via APPLE_ID /
-        # APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID.
+        # APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID. We pass --publish=never
+        # so electron-builder doesn't try to upload to GitHub itself; the
+        # action-gh-release step below handles publishing.
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.DEVELOPMENT_TEAM }}
           CSC_KEY_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
           CERT_BASE64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           echo "$CERT_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           export CSC_LINK="$RUNNER_TEMP/cert.p12"
           node scripts/patch-electron-builder.js
-          npx electron-builder --mac
+          npx electron-builder --mac --publish=never
           rm -f "$RUNNER_TEMP/cert.p12"
 
       - name: Resolve artifacts

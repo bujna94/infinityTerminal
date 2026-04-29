@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD.
 
+## 0.2.10 — 2026-04-29
+
+- First successfully published release of the 0.2.8/0.2.9 changes. The
+  v0.2.8 and v0.2.9 tag-push workflows both failed at the publish step
+  because electron-builder was trying to create the GitHub Release itself
+  with a read-only GITHUB_TOKEN. The release workflow now runs
+  electron-builder with `--publish=never` and grants the job
+  `contents: write` so the dedicated `softprops/action-gh-release` step
+  can create the release.
+
 ## 0.2.9 — 2026-04-29
 
 - Session restore: layout, per-pane colors, and live working directories now
