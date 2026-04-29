@@ -141,8 +141,91 @@ let _ovInvalidateTimer = null; // coalesced refresh timer
 
 // Track the most recently focused terminal (for copy/paste)
 let _activeTermRef = null; // { id, term }
+let _activePaneEl = null;
+function setActivePane(paneEl) {
+  if (_activePaneEl === paneEl) return;
+  if (_activePaneEl) _activePaneEl.classList.remove('active');
+  _activePaneEl = paneEl || null;
+  if (_activePaneEl) _activePaneEl.classList.add('active');
+}
 
 const DEFAULT_BG = '#0f1117';
+
+// Session save/restore — persists layout, per-pane colors, and cwds across
+// launches (and across app updates, since userData survives DMG replacement).
+const SESSION_VERSION = 1;
+let _sessionSaveTimer = null;
+let _sessionRestoring = false; // suppress saves while we're rebuilding state
+function scheduleSessionSave() {
+  if (_sessionRestoring) return;
+  if (_sessionSaveTimer) clearTimeout(_sessionSaveTimer);
+  _sessionSaveTimer = setTimeout(() => { _sessionSaveTimer = null; saveSessionNow(); }, 500);
+}
+async function buildSessionSnapshot() {
+  const cwdLookup = (window.pty && window.pty.getCwd) || null;
+  const focusId = _activeTermRef && _activeTermRef.id;
+  const cols = await Promise.all(columns.map(async (col) => {
+    const [topCwd, bottomCwd] = await Promise.all([
+      cwdLookup ? cwdLookup(col.top.id).catch(() => null) : null,
+      cwdLookup ? cwdLookup(col.bottom.id).catch(() => null) : null,
+    ]);
+    return {
+      top:    { color: col.top.getBg(),    cwd: topCwd },
+      bottom: { color: col.bottom.getBg(), cwd: bottomCwd },
+    };
+  }));
+  let focused = null;
+  if (focusId) {
+    for (let i = 0; i < columns.length; i++) {
+      if (columns[i].top.id === focusId) { focused = { column: i, slot: 'top' }; break; }
+      if (columns[i].bottom.id === focusId) { focused = { column: i, slot: 'bottom' }; break; }
+    }
+  }
+  return {
+    version: SESSION_VERSION,
+    columns: cols,
+    homeLeftIndex: homeLeftNode ? columns.findIndex((c) => c.el === homeLeftNode) : -1,
+    homeRightIndex: homeRightNode ? columns.findIndex((c) => c.el === homeRightNode) : -1,
+    scrollLeft: grid ? grid.scrollLeft : 0,
+    focused,
+  };
+}
+async function saveSessionNow() {
+  if (!window.session) return;
+  try {
+    const snap = await buildSessionSnapshot();
+    await window.session.save(snap);
+  } catch (_) {}
+}
+async function restoreSession(state) {
+  if (!state || !Array.isArray(state.columns) || state.columns.length === 0) return false;
+  _sessionRestoring = true;
+  try {
+    for (const col of state.columns) addColumnRight(false, col);
+    const hl = Number.isInteger(state.homeLeftIndex) ? state.homeLeftIndex : 0;
+    const hr = Number.isInteger(state.homeRightIndex) ? state.homeRightIndex : 1;
+    homeLeftNode  = columns[hl] ? columns[hl].el : (columns[0] && columns[0].el) || null;
+    homeRightNode = columns[hr] ? columns[hr].el : (columns[1] && columns[1].el) || null;
+    requestAnimationFrame(() => {
+      try {
+        if (typeof state.scrollLeft === 'number') {
+          grid.scrollLeft = state.scrollLeft;
+          _lastScrollLeft = grid.scrollLeft;
+        }
+      } catch (_) {}
+      try {
+        if (state.focused) {
+          const col = columns[state.focused.column];
+          const ref = col && col[state.focused.slot];
+          if (ref && typeof ref.focus === 'function') ref.focus();
+        }
+      } catch (_) {}
+    });
+    return true;
+  } finally {
+    _sessionRestoring = false;
+  }
+}
 
 function hslToHex(h, s, l) {
   s = Math.max(0, Math.min(1, s));
@@ -250,9 +333,11 @@ function createTerminal(paneEl) {
   let exited = false;
   let overlayEl = null;
 
-  // Update active terminal on focus/click for clipboard operations
-  try { term.onFocus(() => { _activeTermRef = { id, term }; }); } catch (_) {}
-  try { paneEl.addEventListener('mousedown', () => { _activeTermRef = { id, term }; }); } catch (_) {}
+  // Update active terminal on focus/click for clipboard operations and
+  // the active-pane border highlight.
+  const markActive = () => { _activeTermRef = { id, term }; setActivePane(paneEl); };
+  try { term.onFocus(markActive); } catch (_) {}
+  try { paneEl.addEventListener('mousedown', markActive); } catch (_) {}
 
   function measureCharSize(el) {
     try {
@@ -315,11 +400,15 @@ function createTerminal(paneEl) {
     showRestartOverlay(`Process exited (${exitCode}). Press Enter to restart.`);
   });
 
+  let _bgColor = DEFAULT_BG;
   function applyBackground(color) {
+    _bgColor = color;
     const theme = Object.assign({}, term.options?.theme || {}, { background: color });
     try { term.setOption('theme', theme); } catch (_) { try { term.options.theme = theme; } catch (_) {} }
     try { paneEl.style.setProperty('--term-bg', color); } catch (_) {}
+    scheduleSessionSave();
   }
+  function getBg() { return _bgColor; }
 
   // Hue picker UI for this pane
   let huePickerEl = null;
@@ -405,8 +494,10 @@ function createTerminal(paneEl) {
     scheduleOverviewRefresh();
   });
 
-  async function runLocalShell() {
-    await pty.create({ id });
+  async function runLocalShell(opts = {}) {
+    const args = { id };
+    if (opts.cwd) args.cwd = opts.cwd;
+    await pty.create(args);
     fit();
     term.focus();
     scheduleOverviewRefresh();
@@ -416,6 +507,8 @@ function createTerminal(paneEl) {
 
   function dispose() {
     disposed = true;
+    if (_activePaneEl === paneEl) { _activePaneEl = null; }
+    if (_activeTermRef && _activeTermRef.id === id) _activeTermRef = null;
     try { ro.disconnect(); } catch (_) {}
     try { pty.kill(id); } catch (_) {}
     try { term.dispose(); } catch (_) {}
@@ -455,32 +548,35 @@ function createTerminal(paneEl) {
   // Append hue button to the pane
   paneEl.appendChild(_hueBtn);
 
-  return { id, term, runLocalShell, fit, focus, dispose, pane: paneEl };
+  return { id, term, runLocalShell, fit, focus, dispose, pane: paneEl, applyBackground, getBg };
 }
 
-function createColumnNode() {
+function createColumnNode(opts = {}) {
   const tpl = document.getElementById('column-template');
   const node = tpl.content.firstElementChild.cloneNode(true);
   const topRef = createTerminal(node.querySelector('.pane.top'));
   const bottomRef = createTerminal(node.querySelector('.pane.bottom'));
-  topRef.runLocalShell();
-  bottomRef.runLocalShell();
+  if (opts.top && opts.top.color) topRef.applyBackground(opts.top.color);
+  if (opts.bottom && opts.bottom.color) bottomRef.applyBackground(opts.bottom.color);
+  topRef.runLocalShell({ cwd: opts.top && opts.top.cwd });
+  bottomRef.runLocalShell({ cwd: opts.bottom && opts.bottom.cwd });
   return { node, top: topRef, bottom: bottomRef };
 }
 
-function addColumnRight(scrollIntoView = false) {
-  const { node, top, bottom } = createColumnNode();
+function addColumnRight(scrollIntoView = false, opts = {}) {
+  const { node, top, bottom } = createColumnNode(opts);
   grid.insertBefore(node, rightEdgeEl);
   const index = columns.push({ top, bottom, el: node }) - 1;
   if (scrollIntoView) node.scrollIntoView({ behavior: 'smooth', inline: 'end', block: 'nearest' });
   if (isMinimapOpen()) {
     try { renderOverview(); updateOverviewViewport(); updateOverviewSnapshots(); } catch (_) {}
   }
+  scheduleSessionSave();
   return index;
 }
 
-function addColumnLeft() {
-  const { node, top, bottom } = createColumnNode();
+function addColumnLeft(opts = {}) {
+  const { node, top, bottom } = createColumnNode(opts);
   grid.insertBefore(node, leftEdgeEl.nextSibling);
   // Keep viewport stable after prepending
   // Do not nudge scrollLeft so the left + remains visible when revealed
@@ -488,6 +584,7 @@ function addColumnLeft() {
   if (isMinimapOpen()) {
     try { renderOverview(); updateOverviewViewport(); updateOverviewSnapshots(); } catch (_) {}
   }
+  scheduleSessionSave();
   return 0;
 }
 
@@ -616,17 +713,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   try {
     TerminalCtor = await waitForXterm(4000);
-    // Seed with two visible columns (four terminals) and mark as Home
-    const idx1 = addColumnRight(false);
-    const idx2 = addColumnRight(false);
-    homeLeftNode = columns[idx1]?.el || null;
-    homeRightNode = columns[idx2]?.el || null;
-    // Hide left edge by default so + is off-screen initially
+    // Try to restore previous session (layout/colors/cwds). Fall back to the
+    // default two-column seed if there's no saved state or restore fails.
+    let restored = false;
     try {
-      grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0);
-      _lastScrollLeft = grid.scrollLeft;
-      _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-    } catch (_) {}
+      if (window.session && typeof window.session.load === 'function') {
+        const state = await window.session.load();
+        restored = await restoreSession(state);
+      }
+    } catch (_) { restored = false; }
+    if (!restored) {
+      // Seed with two visible columns (four terminals) and mark as Home
+      const idx1 = addColumnRight(false);
+      const idx2 = addColumnRight(false);
+      homeLeftNode = columns[idx1]?.el || null;
+      homeRightNode = columns[idx2]?.el || null;
+    }
+    // Hide left edge by default so + is off-screen initially.
+    // If we restored a session, restoreSession() already set scrollLeft from
+    // the saved snapshot — don't clobber it.
+    if (!restored) {
+      try {
+        grid.scrollLeft = (leftEdgeEl?.offsetWidth || 0);
+        _lastScrollLeft = grid.scrollLeft;
+        _lastScrollTime = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      } catch (_) {}
+    }
     updateEdgeSnapState();
     // Prepare overview minimap (start when toggled visible)
     try { initOverviewInteractions(); } catch (_) {}
@@ -666,6 +778,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeShortcuts(); }, { capture: true });
     // Overview button removed
     initIpcDispatch();
+
+    // Final session save before quit: main pauses quit and waits for our ack,
+    // so cwds get captured before PTYs are killed.
+    try {
+      if (window.session && typeof window.session.onFinalSave === 'function') {
+        window.session.onFinalSave(async () => {
+          try { await saveSessionNow(); } catch (_) {}
+          try { window.session.finalSaveDone(); } catch (_) {}
+        });
+      }
+    } catch (_) {}
   } catch (e) {
     console.error('Failed to initialize xterm:', e);
     const warn = document.createElement('div');
@@ -1262,12 +1385,22 @@ function drawTextMinimap(term, destCanvas) {
 function updateEdgeSnapState() { /* stickiness disabled */ }
 
 // Re-evaluate snapping as user scrolls and gently continue to hide + when nudged inward
+// rAF-throttle the scroll handler. Without this, every pixel of trackpad
+// motion fires a layout-reading callback (getBoundingClientRect / scrollWidth)
+// which makes horizontal scroll choppy with several columns.
+let _scrollRafQueued = false;
 grid.addEventListener('scroll', () => {
-  updateEdgeSnapState();
-  try { updateOverviewViewport(); } catch (_) {}
-  if (_programmaticScroll) { _lastScrollLeft = grid.scrollLeft; return; }
-  // Stickiness disabled
   _lastScrollLeft = grid.scrollLeft;
+  if (!_programmaticScroll) scheduleSessionSave();
+  if (_scrollRafQueued) return;
+  _scrollRafQueued = true;
+  requestAnimationFrame(() => {
+    _scrollRafQueued = false;
+    updateEdgeSnapState();
+    if (isMinimapOpen()) { try { updateOverviewViewport(); } catch (_) {} }
+  });
+  if (_programmaticScroll) return;
+  // Stickiness disabled
   return;
 
   const leftEdge = (leftEdgeEl?.offsetWidth || 0);

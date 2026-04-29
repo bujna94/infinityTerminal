@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD.
 
+## 0.2.9 — 2026-04-29
+
+- Session restore: layout, per-pane colors, and live working directories now
+  persist across quit, restart, and app updates. Saved to
+  `userData/session.json`; cwds are looked up via `lsof`/`/proc`. Cmd+Shift+R
+  remains the reset escape hatch.
+- Active pane is now highlighted with an inset accent border that follows
+  focus and mouse-down.
+- Smoother horizontal scroll: scroll handler is rAF-throttled, the minimap
+  viewport update is skipped when the minimap is hidden, and columns are
+  promoted to GPU layers so horizontal scroll composites instead of repainting
+  the terminal canvases.
+- Cmd+R prompt no longer also catches Cmd+Shift+R (which is the reset
+  shortcut), and the dialog text now reflects that layout/cwd will be
+  restored, but running commands (vim, npm run dev, claude, etc.) will be
+  terminated and scrollback cleared.
+
 ## 0.2.8 — 2026-04-29
 
 - Reload shortcuts (Cmd/Ctrl+R, Cmd/Ctrl+Shift+R, F5) now show a confirmation

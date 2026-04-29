@@ -221,6 +221,10 @@ body:not(.is-mac) .grid { padding-left: var(--edge); padding-right: var(--edge);
   display: grid;
   grid-template-rows: 1fr 1fr; /* two rows */
   scroll-snap-align: start;
+  /* Promote each column to its own compositor layer so horizontal scroll is
+     a GPU transform rather than a CPU repaint of the canvases inside. */
+  will-change: transform;
+  transform: translateZ(0);
 }
 body:not(.is-mac) .column {
   width: calc((100vw - (2 * var(--edge))) / 2);
@@ -234,6 +238,18 @@ body:not(.is-mac) .column {
 }
 .pane.bottom { border-bottom: none; }
 .column:last-child .pane { border-right: none; }
+
+/* Inset highlight for the focused pane. Use a pseudo-element + box-shadow so
+   we don't shift layout the way a real border would. */
+.pane.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 2px;
+  z-index: 4;
+}
 
 .pane .term {
   position: absolute;

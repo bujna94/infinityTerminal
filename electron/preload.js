@@ -7,8 +7,17 @@ contextBridge.exposeInMainWorld('pty', {
   write: (id, data) => ipcRenderer.send('pty:write', { id, data }),
   resize: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
   kill: (id) => ipcRenderer.send('pty:kill', { id }),
+  getCwd: (id) => ipcRenderer.invoke('pty:get-cwd', { id }),
   onData: (cb) => ipcRenderer.on('pty:data', (_evt, payload) => cb(payload)),
   onExit: (cb) => ipcRenderer.on('pty:exit', (_evt, payload) => cb(payload)),
+});
+
+contextBridge.exposeInMainWorld('session', {
+  save: (state) => ipcRenderer.invoke('session:save', state),
+  load: () => ipcRenderer.invoke('session:load'),
+  clear: () => ipcRenderer.invoke('session:clear'),
+  onFinalSave: (cb) => ipcRenderer.on('session:final-save', () => { try { cb(); } catch (_) {} }),
+  finalSaveDone: () => ipcRenderer.send('session:final-save-done'),
 });
 
 contextBridge.exposeInMainWorld('platform', {

@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, Menu, dialog, shell, nativeImage, net } = require('electron');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
+const { execFile } = require('child_process');
 const pty = require('node-pty');
 const https = require('https');
 
@@ -33,11 +35,12 @@ function createWindow() {
     try { win.setMenuBarVisibility(false); } catch (_) {}
   }
 
-  // Intercept reload shortcuts (Cmd/Ctrl+R, Cmd/Ctrl+Shift+R, F5) so the user
-  // can't wipe their terminal layout by mistakenly hitting Cmd+R for the
-  // browser on another screen.
+  // Intercept Cmd/Ctrl+R and F5 so the user can't kill running processes by
+  // mistakenly hitting Cmd+R for Chrome on another screen. Cmd+Shift+R is the
+  // renderer's reset shortcut and is intentionally allowed through.
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
+    if (input.shift) return;
     const key = (input.key || '').toLowerCase();
     const mod = isMac ? input.meta : input.control;
     const isReload = (mod && key === 'r') || key === 'f5';
@@ -50,11 +53,12 @@ function createWindow() {
       cancelId: 0,
       title: 'Reload Infinity Terminal?',
       message: 'Reload Infinity Terminal?',
-      detail: 'This will reset the window — all open terminals, columns, and scrollback will be cleared.',
-    }).then((res) => {
-      if (res.response === 1) {
-        try { win.webContents.reloadIgnoringCache(); } catch (_) { try { win.webContents.reload(); } catch (_) {} }
-      }
+      detail: 'Layout and working directories will be restored, but any running commands (vim, npm run dev, claude, etc.) will be terminated and scrollback cleared.',
+    }).then(async (res) => {
+      if (res.response !== 1) return;
+      // Flush a session save first so the reload restores fresh cwds.
+      try { await requestRendererFinalSave(win, 600); } catch (_) {}
+      try { win.webContents.reloadIgnoringCache(); } catch (_) { try { win.webContents.reload(); } catch (_) {} }
     }).catch(() => {});
   });
 
@@ -140,15 +144,46 @@ app.on('window-all-closed', function () {
   if (!isMac) app.quit();
 });
 
-// Ensure we terminate all child PTYs when quitting, so Quit actually exits
-app.on('before-quit', () => {
-  isQuitting = true;
-  killAllPtys();
+// Ask the renderer to flush a final session save and wait (capped) for its
+// ack. Used both by Cmd+R reload and by app quit, so cwds get captured before
+// PTYs die or the renderer is reloaded.
+function requestRendererFinalSave(win, timeoutMs = 800) {
+  return new Promise((resolve) => {
+    if (!win || win.isDestroyed()) return resolve();
+    let settled = false;
+    const onResponse = () => { if (settled) return; settled = true; ipcMain.removeListener('session:final-save-done', onResponse); resolve(); };
+    ipcMain.on('session:final-save-done', onResponse);
+    setTimeout(() => { if (!settled) { settled = true; ipcMain.removeListener('session:final-save-done', onResponse); resolve(); } }, timeoutMs);
+    try { win.webContents.send('session:final-save'); } catch (_) { onResponse(); }
+  });
+}
+
+// Ensure we terminate all child PTYs when quitting, so Quit actually exits.
+// Before killing PTYs (which would zero out their cwds), give the renderer a
+// brief window to flush a final session save with up-to-date cwds.
+let _finalSaveDone = false;
+app.on('before-quit', (event) => {
+  if (_finalSaveDone) { isQuitting = true; killAllPtys(); return; }
+  event.preventDefault();
+  const wins = BrowserWindow.getAllWindows();
+  const proceed = () => {
+    _finalSaveDone = true;
+    isQuitting = true;
+    killAllPtys();
+    app.quit();
+  };
+  if (!wins.length) return proceed();
+  Promise.all(wins.map((w) => requestRendererFinalSave(w, 800))).finally(proceed);
 });
 
 // IPC: PTY lifecycle
 ipcMain.handle('pty:create', (event, payload) => {
-  const { id, cmd, args = [], cwd = os.homedir(), env = {} } = payload;
+  const { id, cmd, args = [], env = {} } = payload;
+  let { cwd } = payload;
+  // Fall back to home if a restored cwd no longer exists (deleted dir,
+  // unmounted drive). Empty/missing cwd → home as well.
+  if (!cwd || typeof cwd !== 'string') cwd = os.homedir();
+  else { try { if (!fs.statSync(cwd).isDirectory()) cwd = os.homedir(); } catch (_) { cwd = os.homedir(); } }
   if (!id) throw new Error('pty:create requires id');
   if (ptys.has(id)) throw new Error(`PTY with id ${id} already exists`);
 
@@ -209,6 +244,60 @@ ipcMain.on('pty:kill', (event, { id }) => {
     try { proc.kill(); } catch (_) {}
     ptys.delete(id);
   }
+});
+
+// Best-effort lookup of the shell's current working directory. node-pty only
+// records the *initial* cwd, but the kernel tracks the live cwd of the spawned
+// process, so we read it via lsof (mac) or /proc (linux). Used by session save.
+ipcMain.handle('pty:get-cwd', async (_event, { id }) => {
+  const proc = ptys.get(id);
+  if (!proc || !proc.pid) return null;
+  return getCwdForPid(proc.pid);
+});
+
+function getCwdForPid(pid) {
+  if (process.platform === 'linux') {
+    return new Promise((resolve) => {
+      fs.readlink(`/proc/${pid}/cwd`, (err, link) => resolve(err ? null : link));
+    });
+  }
+  if (process.platform === 'darwin') {
+    return new Promise((resolve) => {
+      execFile('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], { timeout: 1500 }, (err, stdout) => {
+        if (err || !stdout) return resolve(null);
+        const line = stdout.split('\n').find((l) => l.startsWith('n'));
+        resolve(line ? line.slice(1) : null);
+      });
+    });
+  }
+  return Promise.resolve(null);
+}
+
+// Session persistence — layout/colors/cwds across launches. Stored as JSON in
+// userData so it survives app updates (DMG replaces the .app, leaves userData).
+function sessionPath() {
+  return path.join(app.getPath('userData'), 'session.json');
+}
+
+ipcMain.handle('session:save', async (_event, state) => {
+  try {
+    const file = sessionPath();
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, JSON.stringify(state, null, 2), 'utf8');
+    return true;
+  } catch (_) { return false; }
+});
+
+ipcMain.handle('session:load', async () => {
+  try {
+    const data = await fs.promises.readFile(sessionPath(), 'utf8');
+    return JSON.parse(data);
+  } catch (_) { return null; }
+});
+
+ipcMain.handle('session:clear', async () => {
+  try { await fs.promises.unlink(sessionPath()); } catch (_) {}
+  return true;
 });
 
 ipcMain.on('window:control', (_event, payload) => {
