@@ -1,6 +1,6 @@
 {
   "name": "infinity-terminal",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "author": "Pavol Bujna <bujna94@gmail.com>",
   "description": "Fullscreen terminal app with two rows and endless columns",

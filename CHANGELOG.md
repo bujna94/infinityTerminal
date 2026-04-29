@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. Dates are in YYYY-MM-DD.
 
+## 0.2.8 — 2026-04-29
+
+- Reload shortcuts (Cmd/Ctrl+R, Cmd/Ctrl+Shift+R, F5) now show a confirmation
+  dialog before resetting the window, so accidentally hitting Cmd+R while
+  Infinity Terminal is focused on another screen no longer wipes open
+  terminals, columns, and scrollback.
+
 ## 0.2.1 — 2025-09-15
 
 - Added Reset shortcut: Cmd/Ctrl + Shift + R.

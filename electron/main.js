@@ -33,6 +33,31 @@ function createWindow() {
     try { win.setMenuBarVisibility(false); } catch (_) {}
   }
 
+  // Intercept reload shortcuts (Cmd/Ctrl+R, Cmd/Ctrl+Shift+R, F5) so the user
+  // can't wipe their terminal layout by mistakenly hitting Cmd+R for the
+  // browser on another screen.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const key = (input.key || '').toLowerCase();
+    const mod = isMac ? input.meta : input.control;
+    const isReload = (mod && key === 'r') || key === 'f5';
+    if (!isReload) return;
+    event.preventDefault();
+    dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Cancel', 'Reload'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Reload Infinity Terminal?',
+      message: 'Reload Infinity Terminal?',
+      detail: 'This will reset the window — all open terminals, columns, and scrollback will be cleared.',
+    }).then((res) => {
+      if (res.response === 1) {
+        try { win.webContents.reloadIgnoringCache(); } catch (_) { try { win.webContents.reload(); } catch (_) {} }
+      }
+    }).catch(() => {});
+  });
+
   // Notify renderer whether macOS traffic lights are visible (not in fullscreen)
   const sendTrafficState = () => {
     const visible = isMac && !win.isFullScreen();
