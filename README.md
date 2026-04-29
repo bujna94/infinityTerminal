@@ -2,90 +2,53 @@
 
 # Infinity Terminal — Two Rows. Endless Columns.
 
+A native macOS terminal app: a horizontally scrolling grid of terminals,
+always two rows tall and as many columns wide as you want. Built with
+Swift / AppKit and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
+
 ## Screenshots
 
 ![App Screenshot 1](resources/screenshot.png)
 ![App Screenshot 2](resources/screenshot2.png)
 
-## Overview
-- Fullscreen Electron app showing a grid of terminals: always 2 rows, unlimited columns.
-- Scroll horizontally with a trackpad (two-finger swipe) to navigate columns.
-- Each column holds two terminals (top and bottom). Start with 2 columns (4 terminals).
- - Optional horizontal minimap: drag to pan; toggle with a button or shortcut.
+## Requirements
 
-Prerequisites
-- macOS or Linux (Ubuntu 20.04+ recommended).
-- Node.js 18+ and npm.
+- macOS 14 (Sonoma) or later
+- Xcode 15+ command line tools (`xcode-select --install`)
+- A Developer ID Application certificate is only needed for signed/notarized
+  builds; debug builds run unsigned.
 
-Install
-1. cd into this folder
-2. npm install
-3. npm run rebuild:pty   # rebuild node-pty for your Electron
-4. npm start
+## Build & run
 
-Usage
-- App launches fullscreen; toolbar at top:
-  - 🏠 Home: scroll to the original two columns (keeps all terminals). Shortcut: Cmd+Shift+H (mac) or Ctrl+Shift+H (win/linux).
-  - ⬅️/➡️ Add Column: keyboard shortcuts to add columns without clicking:
-    - Add Left: Cmd+Shift+Left (mac) or Ctrl+Shift+Left (win/linux)
-    - Add Right: Cmd+Shift+Right (mac) or Ctrl+Shift+Right (win/linux)
-  - ↺ Reset: recreate the original two columns (disposes current terminals and PTYs).
-  - ＋ New Column: adds another pair of terminals.
-- Scroll horizontally (two-finger swipe) to move across columns.
-- Each pane resizes automatically; scrollback defaults to 5,000 lines.
+```sh
+swift build -c release
+open .build/release/InfinityTerminal      # or run from Xcode
+```
 
-Minimap
-- Toggle: toolbar “🗺 Minimap” or Cmd/Ctrl + Shift + M.
-- Drag anywhere on the minimap to pan the main grid.
-- Resize vertically: drag the top edge handle; layout adapts live.
-- The minimap mirrors the 2×N grid (two stacked thumbnails per column).
-- Pane backgrounds in the minimap match the terminals’ backgrounds.
+For a fully packaged, signed, and notarized DMG:
 
-SSH-Aware Background Colors
-- Local shells keep the default background (Color A).
-- After a successful SSH login (strict success cues like “Last login”), the
-  terminal background changes to a deterministic dark color based on host/IP.
-- All terminals connected to the same host share the same color.
-- On SSH disconnect/failure, the pane reverts to the default background.
-- The minimap reflects these background colors.
+```sh
+# put APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM in .env
+./build-app.sh --dmg
+```
 
-Recover After Exit
-- When a PTY exits, the pane shows a short message.
-- Press Enter or click the pane to immediately respawn a local shell in place.
+`build-app.sh` produces `.build/InfinityTerminal.app` (always) and
+`.build/InfinityTerminal-<version>.dmg` (with `--dmg`). Notarization is
+skipped if the Apple credentials aren't present.
 
-Notes
-- The app uses @xterm/xterm for terminal rendering and node-pty for pseudo-terminal processes.
-- Fit is implemented without @xterm/addon-fit to avoid peer/version issues.
- - The grid’s scrollbar is styled dark to match the theme.
+## Project layout
 
-Project Structure
-- electron/main.js: Electron app, PTY management, IPC.
-- electron/preload.js: secure bridge exposing PTY APIs to the renderer.
-- src/index.html, src/styles.css: UI and layout.
-- src/renderer.js: xterm.js setup, 2xN grid logic.
- - resources/appLogoSmaller.icns: macOS app icon for packaged builds.
- - resources/appLogoWithBackground_1200x630px.png: main logo with background.
- - resources/screenshot.png, resources/screenshot2.png: app screenshots.
+- `Sources/InfinityTerminal/` — Swift sources
+  - `main.swift` — `NSApplication` bootstrap
+  - `Models/` — grid + session model objects
+  - `Views/` — AppKit views (toolbar, columns, panes, minimap, shortcuts)
+  - `Resources/` — bundled icon + logo
+- `Package.swift` — SwiftPM manifest (target depends on SwiftTerm)
+- `build-app.sh` — packaging / signing / notarization
+- `resources/` — README screenshots and the OG image used by the website
 
-Customization
-- Change default number of initial columns in `src/renderer.js`.
-- Adjust theme/fonts in `src/renderer.js` and `src/styles.css`.
- - Tweak SSH success/failure/close detection patterns in `src/renderer.js`.
+## Releases
 
-Troubleshooting
-- If terminals are blank, ensure node modules installed: `npm install`.
-- If Electron shows a native module mismatch for node-pty, run `npm run rebuild:pty` (it auto-detects your installed Electron version), then `npm start` again.
-
-Build a macOS App (DMG/ZIP)
-- Install builder (already in devDependencies): `npm i`.
-- Build: `npm run dist` → creates signed, notarized `.app`, `.dmg`, and `.zip` in `dist/`.
-- Icons: uses `resources/appLogoSmaller.icns`.
-- **Code Signing & Notarization**: Fully implemented with Developer ID certificate.
-- **Security**: Apps install without warnings on macOS thanks to proper signing and notarization.
-- **Default Directory**: Terminal opens in user's home directory (like native Terminal.app).
-- `.gitignore` excludes `dist/` and signing secrets, so artifacts and credentials aren't committed.
-
-Build a Linux App (AppImage/DEB)
-- Build: `npm run dist:linux` → creates `.AppImage` and `.deb` in `dist/`.
-- Optional: `npm run dist:appimage` or `npm run dist:deb`.
-- If `node-pty` fails to load in the packaged app, ensure `asarUnpack` includes `**/*.node` and `node_modules/node-pty/**` (already configured).
+Tagged `v1.x.y`; the GitHub release is built and published manually from
+`build-app.sh` output. The `update-web.yml` workflow propagates the release
+notes onto [infinityterminal.com](https://infinityterminal.com).

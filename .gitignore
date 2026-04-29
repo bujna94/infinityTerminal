@@ -1,12 +1,16 @@
-node_modules/
 .DS_Store
+
+# Swift / SwiftPM build output
+.build/
+.swiftpm/
+*.o
+*.d
+*.app
+
+# Build/distribution
 out/
 dist/
-# Electron build artifacts
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # Code signing secrets and keys
 .env*

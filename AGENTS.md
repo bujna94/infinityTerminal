@@ -1,36 +1,35 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `electron/main.js`: Electron entry; window lifecycle and PTY IPC.
-- `electron/preload.js`: Safe bridge exposing `pty` and `xterm` to the renderer.
-- `src/index.html`, `src/styles.css`, `src/renderer.js`: UI, layout, and 2xN terminal grid logic.
-- `scripts/rebuild-pty.js`: Rebuilds `node-pty` for the installed Electron version.
+- `Sources/InfinityTerminal/main.swift` — `NSApplication` bootstrap.
+- `Sources/InfinityTerminal/Models/` — grid + session models (`TerminalGridModel`, `TerminalColumn`, `TerminalSession`).
+- `Sources/InfinityTerminal/Views/` — AppKit views: `ContentView`, `ToolbarView`, `TerminalColumnView`, `TerminalPaneView`, `MinimapView`, `ShortcutsView`.
+- `Sources/InfinityTerminal/Resources/` — bundled icon and logo.
+- `Package.swift` — SwiftPM manifest; target depends on [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
+- `build-app.sh` — packaging, code signing, notarization (Hardened Runtime + Developer ID).
 
 ## Build, Test, and Development Commands
-- `npm install` — install dependencies.
-- `npm run rebuild:pty` — rebuild native `node-pty` to match Electron ABI.
-- `npm start` — rebuild `node-pty` if needed, then launch the app.
-- `npm run dev` — launch Electron without the rebuild step (use after a successful rebuild).
+- `swift build` — debug build (`.build/debug/InfinityTerminal`).
+- `swift build -c release` — release build (`.build/release/InfinityTerminal`).
+- `./build-app.sh` — wrap release build into `.build/InfinityTerminal.app` (signed, ad-hoc if no Developer ID).
+- `./build-app.sh --dmg` — sign + notarize + produce a DMG. Requires `APPLE_ID`, `APPLE_PASSWORD` (app-specific), `APPLE_TEAM` (env or `.env`).
 
 ## Coding Style & Naming Conventions
-- Language: modern JavaScript (Node 18+/Electron).
-- Indentation: 2 spaces; keep lines < 100 chars where reasonable.
-- Strings: single quotes; always terminate with semicolons.
-- Naming: `lowercase` filenames (use hyphens only if needed); `camelCase` for functions/variables; `PascalCase` for classes.
-- Module boundaries: keep Electron (main/preload) logic separate from renderer code; add APIs via `preload` rather than enabling more renderer privileges.
+- Swift 5.9, target macOS 14.
+- 4-space indent, trailing commas where useful, no force-unwraps in production paths.
+- Naming: `PascalCase` types, `camelCase` properties / methods, `lowercase` file matches type name.
+- Keep view logic in `Views/`, state in `Models/`. NSView subclasses own their resize/focus behavior; the model is the source of truth for layout.
 
 ## Testing Guidelines
-- No test suite yet. If adding tests:
-  - Unit: Vitest/Jest for pure functions; name files `*.test.js` colocated or in `__tests__/`.
-  - E2E: Playwright to boot Electron and assert basic flows (window loads, terminals spawn, SSH prompt).
-  - Add a `test` script in `package.json` and keep fast, deterministic tests.
+- No test suite yet. When adding tests, use SwiftPM's `.testTarget(...)` in `Package.swift` and put files under `Tests/InfinityTerminalTests/`.
+- Run with `swift test`.
 
 ## Commit & Pull Request Guidelines
-- Commits: prefer Conventional Commits (e.g., `feat: add SSH prompt`, `fix(pty): resize guard`).
-- PRs: include a short description, screenshots or short GIFs for UI changes, repro steps for bugs, and link related issues.
-- Scope PRs narrowly; update README when behavior or commands change.
+- Commits: short imperative subject; include the bug or feature name. Conventional Commits welcome (`feat:`, `fix:`, `build:`).
+- PRs: short description, screenshots for UI changes, repro steps for bugs.
+- Bump `VERSION` and `BUILD_NUMBER` in `build-app.sh` when releasing.
 
 ## Security & Configuration Tips
-- Prefer the `preload` bridge (`window.pty`, `window.xterm`); avoid adding new `require` usage in the renderer.
-- After upgrading Electron or `node-pty`, run `npm run rebuild:pty`.
-- Keep `electron/main.js` IPC minimal and validate payloads (`id`, `cols`, `rows`).
+- Code signing identity: `Developer ID Application: Pavol Bujna (334EJ7NNV2)`.
+- Hardened Runtime entitlements are generated inline by `build-app.sh` (no sandbox — full PTY support requires it).
+- Notarization credentials belong in `.env` (gitignored). Never commit `.env*`, `.p12`, `.p8`, or any signing artifact.
