@@ -19,6 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupWindow()
         setupKeyboardShortcuts()
         setupScrollInterception()
+        setupFocusTracking()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Flush any pending debounced save so the very latest cwd/layout
+        // makes it to disk before the PTYs are torn down by the system.
+        gridModel.saveNow()
     }
 
     // MARK: Main menu (required for ⌘Q, ⌘H, etc.)
@@ -254,6 +261,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    // MARK: - Active pane tracking
+    //
+    // LocalProcessTerminalView's mouseDown / becomeFirstResponder aren't
+    // `open`, so we can't intercept them in our subclass. Instead we sit on
+    // a global mouseDown monitor (same pattern as scroll interception) and
+    // walk up from the hit-tested view until we find the InfinityTerminalNSView
+    // — that view's `sessionID` becomes the new active pane.
+
+    private func setupFocusTracking() {
+        let m = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            let pt = event.locationInWindow
+            guard let hit = self.window?.contentView?.hitTest(pt) else { return event }
+            var v: NSView? = hit
+            while let cur = v {
+                if let term = cur as? InfinityTerminalNSView, let sid = term.sessionID {
+                    if self.gridModel.activeSessionID != sid {
+                        self.gridModel.activeSessionID = sid
+                        self.gridModel.scheduleSave()
+                    }
+                    break
+                }
+                v = cur.superview
+            }
+            return event
+        }
+        monitors.append(m!)
+    }
 
     deinit { monitors.forEach { NSEvent.removeMonitor($0) } }
 }

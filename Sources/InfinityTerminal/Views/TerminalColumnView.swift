@@ -29,6 +29,7 @@ struct HueCircleIcon: View {
 // MARK: - Hue picker popover content
 
 struct HuePickerPopover: View {
+    @EnvironmentObject var gridModel: TerminalGridModel
     @ObservedObject var session: TerminalSession
     @Binding var isPresented: Bool
 
@@ -83,6 +84,7 @@ struct HuePickerPopover: View {
                         && abs(applied!.hueComponent - currentColor!.hueComponent) < 0.01)
                 Button {
                     session.userBackgroundColor = applied
+                    gridModel.scheduleSave()
                     isPresented = false
                 } label: {
                     Circle()
@@ -140,11 +142,19 @@ struct TerminalPaneWrapper: View {
     @State private var isHovered = false
     @State private var showColorPicker = false
 
+    /// Accent color used by the active-pane border, matching the toolbar/minimap.
+    private static let accent = Color(red: 0.310, green: 0.451, blue: 1.0)
+
+    private var isActive: Bool { gridModel.activeSessionID == session.id }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            TerminalPaneView(session: session, fontSize: gridModel.fontSize, onProcessExit: { [session, gridModel] in
-                    gridModel.closePane(session: session)
-                })
+            TerminalPaneView(session: session,
+                             fontSize: gridModel.fontSize,
+                             onProcessExit: { [session, gridModel] in
+                                 gridModel.closePane(session: session)
+                             },
+                             gridModel: gridModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if session.isExited {
@@ -160,9 +170,17 @@ struct TerminalPaneWrapper: View {
                     .transition(.opacity)
             }
         }
+        .overlay(
+            // Inset accent border for the focused pane. Drawn on top with no
+            // hit-testing so it never intercepts terminal mouse input.
+            Rectangle()
+                .strokeBorder(isActive ? Self.accent : Color.clear, lineWidth: 2)
+                .allowsHitTesting(false)
+        )
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: showColorPicker)
+        .animation(.easeInOut(duration: 0.12), value: isActive)
     }
 
     // MARK: Control strip
