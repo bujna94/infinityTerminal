@@ -66,12 +66,15 @@ jobs:
               html
           )
 
-          # 5. Build changelog <li> items from release body bullet points
+          # 5. Build changelog <li> items from release body bullet points.
+          # Require whitespace after the bullet character so we don't pick up
+          # markdown bold like "**Full Changelog**: ..." which auto-generated
+          # release bodies always include.
           items = []
           for line in body.splitlines():
               line = line.strip()
-              if re.match(r'^[-*]', line):
-                  line = re.sub(r'^[-*]\s*', '', line)
+              if re.match(r'^[-*]\s+', line):
+                  line = re.sub(r'^[-*]\s+', '', line)
                   # Convert **bold** to <strong>
                   line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', line)
                   # Convert `code` to <code>
