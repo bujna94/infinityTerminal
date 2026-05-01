@@ -270,15 +270,8 @@ struct TerminalColumnView: View {
         // extended asymmetrically so it also lands on top of the *previous*
         // column's right divider on the left, and onto the inter-pane
         // horizontal divider above when the bottom pane is active.
-        //
-        // strokeBorder draws strictly inside the shape, so:
-        //  • width = geo.width + 1, offset x = -1
-        //      → left stroke at [-1, 0] (covers prev column's right divider),
-        //        right stroke at [width-1, width] (covers own right divider).
-        //  • For the bottom pane (i > 0), extend top by 1 so the top stroke
-        //    lands on the divider drawn at the top pane's bottom edge.
-        //  • The natural bottom stroke of the top pane (i = 0) already lands
-        //    on that same divider, so no bottom extension is ever needed.
+        // No transition animation — the outline snaps to whichever pane was
+        // just clicked.
         .overlay {
             GeometryReader { geo in
                 if let i = activeIndex {
@@ -289,7 +282,6 @@ struct TerminalColumnView: View {
                         .strokeBorder(Self.accent.opacity(0.3), lineWidth: 1)
                         .frame(width: geo.size.width + 1, height: h + topPad)
                         .offset(x: -1, y: CGFloat(i) * h - topPad)
-                        .animation(.easeInOut(duration: 0.12), value: i)
                 }
             }
             .allowsHitTesting(false)
