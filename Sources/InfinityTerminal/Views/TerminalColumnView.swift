@@ -142,11 +142,6 @@ struct TerminalPaneWrapper: View {
     @State private var isHovered = false
     @State private var showColorPicker = false
 
-    /// Accent color used by the active-pane border, matching the toolbar/minimap.
-    private static let accent = Color(red: 0.310, green: 0.451, blue: 1.0)
-
-    private var isActive: Bool { gridModel.activeSessionID == session.id }
-
     var body: some View {
         ZStack(alignment: .topTrailing) {
             TerminalPaneView(session: session,
@@ -170,17 +165,9 @@ struct TerminalPaneWrapper: View {
                     .transition(.opacity)
             }
         }
-        .overlay(
-            // Inset accent border for the focused pane. Drawn on top with no
-            // hit-testing so it never intercepts terminal mouse input.
-            Rectangle()
-                .strokeBorder(isActive ? Self.accent : Color.clear, lineWidth: 2)
-                .allowsHitTesting(false)
-        )
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: showColorPicker)
-        .animation(.easeInOut(duration: 0.12), value: isActive)
     }
 
     // MARK: Control strip
@@ -242,8 +229,19 @@ struct TerminalPaneWrapper: View {
 // MARK: - Column view
 
 struct TerminalColumnView: View {
+    @EnvironmentObject var gridModel: TerminalGridModel
     @ObservedObject var column: TerminalColumn
     let columnIndex: Int
+
+    /// Accent color for the active-pane outline, matches toolbar/minimap.
+    private static let accent = Color(red: 0.310, green: 0.451, blue: 1.0)
+
+    /// Index (0 = top, 1 = bottom) of the active session within this column,
+    /// or nil if the active pane lives somewhere else.
+    private var activeIndex: Int? {
+        guard let id = gridModel.activeSessionID else { return nil }
+        return column.sessions.firstIndex(where: { $0.id == id })
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -266,6 +264,35 @@ struct TerminalColumnView: View {
             Rectangle()
                 .fill(Color.white.opacity(0.10))
                 .frame(width: 1)
+        }
+        // Active-pane outline. Drawn *after* the column's own right divider
+        // so the accent stroke covers it (no white-then-blue seam) and
+        // extended asymmetrically so it also lands on top of the *previous*
+        // column's right divider on the left, and onto the inter-pane
+        // horizontal divider above when the bottom pane is active.
+        //
+        // strokeBorder draws strictly inside the shape, so:
+        //  • width = geo.width + 1, offset x = -1
+        //      → left stroke at [-1, 0] (covers prev column's right divider),
+        //        right stroke at [width-1, width] (covers own right divider).
+        //  • For the bottom pane (i > 0), extend top by 1 so the top stroke
+        //    lands on the divider drawn at the top pane's bottom edge.
+        //  • The natural bottom stroke of the top pane (i = 0) already lands
+        //    on that same divider, so no bottom extension is ever needed.
+        .overlay {
+            GeometryReader { geo in
+                if let i = activeIndex {
+                    let count = max(1, column.sessions.count)
+                    let h = geo.size.height / CGFloat(count)
+                    let topPad: CGFloat = i > 0 ? 1 : 0
+                    Rectangle()
+                        .strokeBorder(Self.accent.opacity(0.3), lineWidth: 1)
+                        .frame(width: geo.size.width + 1, height: h + topPad)
+                        .offset(x: -1, y: CGFloat(i) * h - topPad)
+                        .animation(.easeInOut(duration: 0.12), value: i)
+                }
+            }
+            .allowsHitTesting(false)
         }
     }
 }
