@@ -131,14 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             default: break
             }
             switch ch {
-            case "r": DispatchQueue.main.async {
-                var t = Transaction()
-                t.disablesAnimations = true
-                withTransaction(t) { self.gridModel.reset() }
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .jumpToStartInstant, object: nil)
-                }
-            }; return nil
+            case "r": DispatchQueue.main.async { self.confirmAndReset() }; return nil
             case "m": DispatchQueue.main.async { self.gridModel.toggleMinimap() }; return nil
             case "h": DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .jumpToHome, object: nil)
@@ -261,6 +254,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    // MARK: - Reset confirmation
+    //
+    // Cmd+Shift+R wipes every open pane and overwrites the saved session, so
+    // gate it behind a modal so an accidental three-key combo can't destroy
+    // a working layout.
+
+    private func confirmAndReset() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Reset Infinity Terminal?"
+        alert.informativeText = "This closes every open terminal and clears the saved session. Running commands (vim, npm run dev, claude, etc.) will be terminated."
+        alert.addButton(withTitle: "Cancel")   // default — Return / Esc cancels
+        alert.addButton(withTitle: "Reset")
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { self.gridModel.reset() }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .jumpToStartInstant, object: nil)
+        }
+    }
 
     // MARK: - Active pane tracking
     //
