@@ -72,6 +72,8 @@ jobs:
         with:
           name: macos-dmg
           path: .build/*.dmg
+          # `.build` is a dotted directory; v4 excludes hidden paths by default.
+          include-hidden-files: true
 
       - name: Prepare release notes body
         id: notes
