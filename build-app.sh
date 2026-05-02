@@ -151,24 +151,17 @@ SPARKLE_FW="${APP_PATH}/Contents/Frameworks/Sparkle.framework"
 if security find-identity -v -p codesigning | grep -q "${SIGN_ID}"; then
     echo "→ Signing…"
 
-    if [ -d "${SPARKLE_FW}" ]; then
-        # Sign each piece inside the Sparkle framework first.
-        for helper in \
-            "${SPARKLE_FW}/Versions/A/XPCServices/Downloader.xpc" \
-            "${SPARKLE_FW}/Versions/A/XPCServices/Installer.xpc" \
-            "${SPARKLE_FW}/Versions/A/Updater.app/Contents/MacOS/Autoupdate" \
-            "${SPARKLE_FW}/Versions/A/Updater.app" \
-            "${SPARKLE_FW}/Versions/A/Autoupdate" \
-            "${SPARKLE_FW}"
-        do
-            [ -e "${helper}" ] || continue
-            codesign --force --options runtime \
-                --sign "${SIGN_ID}" \
-                "${helper}"
-        done
-    fi
+    xattr -cr "${APP_PATH}"
 
-    codesign --force --options runtime \
+    # Single --deep --force pass over the entire bundle. This re-signs
+    # Sparkle's helpers along with everything else with our Developer ID,
+    # Hardened Runtime, and a trusted timestamp, which is what the notary
+    # actually needs. Sparkle's docs caution against --deep because it
+    # forgets entitlements on inner targets, but our Sparkle helpers don't
+    # need entitlements (no sandbox) so this is safe and avoids the
+    # per-binary chain that was producing notarizable-on-disk-but-rejected
+    # signatures.
+    codesign --force --deep --options runtime --timestamp \
         --entitlements "${ENTITLEMENTS_FILE}" \
         --sign "${SIGN_ID}" \
         "${APP_PATH}"
