@@ -16,6 +16,10 @@ class TerminalSession: ObservableObject, Identifiable {
     /// re-open the pane in the same directory after a session restore.
     @Published var cwd: String?
 
+    /// Optional user-assigned label shown in the pane's top-left corner.
+    /// Persisted in the session snapshot.
+    @Published var name: String?
+
     static let defaultBackground = NSColor(red: 0.059, green: 0.067, blue: 0.090, alpha: 1.0)
 
     var backgroundColor: NSColor {
@@ -33,11 +37,12 @@ class TerminalSession: ObservableObject, Identifiable {
 
     init() {}
 
-    /// Initialize from a restored snapshot (color + cwd carried over from a
-    /// previous launch). The PTY is started lazily by TerminalPaneView.
+    /// Initialize from a restored snapshot (color + cwd + name carried over
+    /// from a previous launch). The PTY is started lazily by TerminalPaneView.
     init(snapshot: TerminalSessionSnapshot) {
         self.userBackgroundColor = snapshot.color?.nsColor
         self.cwd = snapshot.cwd
+        self.name = snapshot.name
     }
 
     func markExited(code: Int32) {

@@ -143,7 +143,8 @@ class TerminalGridModel: ObservableObject {
         let cols: [TerminalColumnSnapshot] = columns.map { col in
             TerminalColumnSnapshot(sessions: col.sessions.map {
                 TerminalSessionSnapshot(color: ColorSnapshot($0.userBackgroundColor),
-                                        cwd: $0.cwd)
+                                        cwd: $0.cwd,
+                                        name: $0.name)
             })
         }
         let homeIdx = homeColumnID.flatMap { id in

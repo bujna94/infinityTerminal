@@ -30,6 +30,7 @@ struct ColorSnapshot: Codable, Equatable {
 struct TerminalSessionSnapshot: Codable, Equatable {
     var color: ColorSnapshot?
     var cwd: String?
+    var name: String?
 }
 
 struct TerminalColumnSnapshot: Codable, Equatable {

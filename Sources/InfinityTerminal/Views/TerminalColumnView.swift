@@ -103,6 +103,45 @@ struct HuePickerPopover: View {
     }
 }
 
+// MARK: - Rename popover
+
+/// Tiny popover with a single text field for setting / clearing a pane's
+/// user-assigned name. Empty field clears the name (label disappears).
+struct RenamePopover: View {
+    @EnvironmentObject var gridModel: TerminalGridModel
+    @ObservedObject var session: TerminalSession
+    @Binding var isPresented: Bool
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            TextField("Name", text: $draft)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 160)
+                .focused($focused)
+                .onSubmit { commit() }
+            Button("Done") { commit() }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(10)
+        .onAppear {
+            draft = session.name ?? ""
+            DispatchQueue.main.async { focused = true }
+        }
+    }
+
+    private func commit() {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newName: String? = trimmed.isEmpty ? nil : trimmed
+        if session.name != newName {
+            session.name = newName
+            gridModel.scheduleSave()
+        }
+        isPresented = false
+    }
+}
+
 // MARK: - Exit overlay
 
 struct ExitOverlayView: View {
@@ -141,9 +180,10 @@ struct TerminalPaneWrapper: View {
 
     @State private var isHovered = false
     @State private var showColorPicker = false
+    @State private var showRename = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        ZStack(alignment: .topLeading) {
             TerminalPaneView(session: session,
                              fontSize: gridModel.fontSize,
                              onProcessExit: { [session, gridModel] in
@@ -159,15 +199,30 @@ struct TerminalPaneWrapper: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            if isHovered || showColorPicker {
+            // User-assigned name label, top-left. Always visible when set so
+            // the user can see which terminal is which without hovering.
+            if let name = session.name, !name.isEmpty {
+                Text(name)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(Color(white: 0.85))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color(red: 0.07, green: 0.09, blue: 0.13).opacity(0.93))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .padding(6)
+            }
+
+            if isHovered || showColorPicker || showRename {
                 paneControls
                     .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .topTrailing)
                     .transition(.opacity)
             }
         }
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: showColorPicker)
+        .animation(.easeInOut(duration: 0.15), value: showRename)
     }
 
     // MARK: Control strip
@@ -189,6 +244,20 @@ struct TerminalPaneWrapper: View {
             }
             if (col?.sessions.count ?? 0) == 2 {
                 ctrlBtn("⇅", help: "Swap top / bottom") { gridModel.swapVertically(columnIndex: columnIndex) }
+            }
+
+            // Rename — opens a small text-field popover.
+            Button(action: { showRename.toggle() }) {
+                Text("✎")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color(white: 0.75))
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Rename pane")
+            .popover(isPresented: $showRename, arrowEdge: .bottom) {
+                RenamePopover(session: session, isPresented: $showRename)
             }
 
             // Hue circle — background color picker
