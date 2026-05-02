@@ -186,6 +186,16 @@ struct TerminalPaneWrapper: View {
     /// below it instead of having the first row hidden under the label.
     private static let nameBadgeHeight: CGFloat = 28
 
+    /// Extra breathing room between the badge and the terminal's first row
+    /// of text. Filled by the pane's hue backdrop, so it reads as part of
+    /// the colored header strip.
+    private static let textTopGap: CGFloat = 3
+
+    /// Fixed slate fill for the badge and hover-controls bars. Stays the same
+    /// regardless of the terminal's hue — only the strip *behind* the bars
+    /// follows the user's hue selection (see `.background` on the wrapper).
+    private static let barFill = Color(red: 0.07, green: 0.09, blue: 0.13)
+
     private var hasName: Bool {
         if let n = session.name { return !n.isEmpty }
         return false
@@ -200,7 +210,7 @@ struct TerminalPaneWrapper: View {
                              },
                              gridModel: gridModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.top, hasName ? Self.nameBadgeHeight : 0)
+                .padding(.top, hasName ? Self.nameBadgeHeight + Self.textTopGap : 0)
 
             if session.isExited {
                 ExitOverlayView(exitCode: session.exitCode) {
@@ -217,10 +227,10 @@ struct TerminalPaneWrapper: View {
             if let name = session.name, !name.isEmpty {
                 Text(name)
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color(white: 0.9))
+                    .foregroundColor(Color(white: 0.95))
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(Color(red: 0.07, green: 0.09, blue: 0.13))
+                    .frame(height: Self.nameBadgeHeight)
+                    .background(Self.barFill)
                     .clipShape(
                         .rect(cornerRadii: RectangleCornerRadii(bottomTrailing: 6))
                     )
@@ -232,11 +242,17 @@ struct TerminalPaneWrapper: View {
 
             if isHovered || showColorPicker || showRename {
                 paneControls
-                    .padding(6)
                     .frame(maxWidth: .infinity, alignment: .topTrailing)
                     .transition(.opacity)
             }
         }
+        // Backdrop the whole pane with the terminal's own background so the
+        // 28pt strip exposed above the terminal (when a name pushes it down)
+        // — i.e. what's visible *behind* the badge / controls bars — picks
+        // up the user's hue selection. The terminal view fully covers this
+        // backdrop everywhere except that header strip, so this is a no-op
+        // visually for unnamed panes.
+        .background(Color(nsColor: session.backgroundColor))
         .onHover { isHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: showColorPicker)
@@ -295,10 +311,16 @@ struct TerminalPaneWrapper: View {
                 gridModel.closePane(columnIndex: columnIndex, sessionIndex: sessionIndex)
             }
         }
-        .padding(.horizontal, 5)
-        .padding(.vertical, 3)
-        .background(Color(red: 0.07, green: 0.09, blue: 0.13).opacity(0.93))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .padding(.horizontal, 6)
+        .frame(height: Self.nameBadgeHeight)
+        .background(Self.barFill.opacity(0.93))
+        .clipShape(
+            .rect(cornerRadii: RectangleCornerRadii(bottomLeading: 6))
+        )
+        .overlay(
+            UnevenRoundedRectangle(cornerRadii: RectangleCornerRadii(bottomLeading: 6))
+                .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+        )
     }
 
     private func ctrlBtn(_ label: String, help: String, action: @escaping () -> Void) -> some View {

@@ -5,6 +5,45 @@ let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 NSWindow.allowsAutomaticWindowTabbing = false  // suppresses "cannot index window tabs" warning
 
+// MARK: - Window with vertically-centered traffic-light buttons
+//
+// Our toolbar is 38pt tall but the system's standard title bar is ~28pt, so the
+// close/min/zoom buttons sit above the toolbar's vertical center. We override
+// `setFrame` (called on every resize, including zoom/maximize) and shift the
+// buttons down so their centers land on the toolbar's center.
+
+final class CenteredTrafficLightWindow: NSWindow {
+    /// Must match `ToolbarView`'s `.frame(height: 38)` — keep them in sync.
+    static let toolbarHeight: CGFloat = 38
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        super.setFrame(frameRect, display: flag)
+        DispatchQueue.main.async { [weak self] in self?.recenterTrafficLights() }
+    }
+
+    func recenterTrafficLights() {
+        let buttons: [NSButton] = [
+            standardWindowButton(.closeButton),
+            standardWindowButton(.miniaturizeButton),
+            standardWindowButton(.zoomButton),
+        ].compactMap { $0 }
+
+        for b in buttons {
+            guard let parent = b.superview else { continue }
+            let h = b.frame.height
+            // themeFrame is unflipped (origin bottom-left); window top is at
+            // parent.bounds.height. Center the button in `toolbarHeight` from
+            // the top.
+            let targetY = parent.bounds.height - (Self.toolbarHeight + h) / 2
+            if abs(b.frame.origin.y - targetY) > 0.5 {
+                var f = b.frame
+                f.origin.y = targetY
+                b.frame = f
+            }
+        }
+    }
+}
+
 // MARK: - App delegate
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -68,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(gridModel)
             .ignoresSafeArea()
 
-        window = NSWindow(
+        window = CenteredTrafficLightWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1400, height: 900),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -87,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrameAutosaveName("InfinityTerminal.main")
         window.center()
         window.makeKeyAndOrderFront(nil)
+        (window as? CenteredTrafficLightWindow)?.recenterTrafficLights()
         NSApp.activate(ignoringOtherApps: true)
     }
 

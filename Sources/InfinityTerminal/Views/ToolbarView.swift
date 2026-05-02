@@ -33,32 +33,21 @@ struct ToolbarView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Spacer clears the traffic-light buttons (zoom right edge ≈ 54pt)
+            // Spacer clears the traffic-light buttons (zoom right edge ≈ 67pt
+            // when buttons are vertically centered in the 38pt toolbar).
             Spacer()
-                .frame(width: 90)
-
-            // Brand: appLogo.png + "Infinity Terminal"
-            HStack(spacing: 8) {
-                appLogoImage
-                    .frame(height: 14)
-
-                Text("Infinity Terminal")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(Color(red: 229.0/255.0, green: 233.0/255.0, blue: 240.0/255.0))
-            }
+                .frame(width: 76)
 
             Spacer()
-
-            // Hint text
-            Text("Scroll left/right to add columns")
-                .font(.system(size: 11))
-                .foregroundColor(Color(red: 0.478, green: 0.514, blue: 0.576))
-
-            Spacer()
-                .frame(width: 16)
 
             // Action buttons
             HStack(spacing: 6) {
+                // Hint text — sits just before the action buttons on the right.
+                Text("Scroll left/right to add columns")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(red: 0.478, green: 0.514, blue: 0.576))
+                    .padding(.trailing, 6)
+
                 ToolbarButton(label: "🏠 Home", action: onScrollToStart)
 
                 ToolbarButton(label: "↺ Reset") {
@@ -119,6 +108,18 @@ struct ToolbarView: View {
                     RoundedRectangle(cornerRadius: 5)
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 )
+
+                // Brand: appLogo.png + "Infinity Terminal" — anchored on
+                // the far right, after the font-size stepper.
+                HStack(spacing: 8) {
+                    appLogoImage
+                        .frame(height: 14)
+
+                    Text("Infinity Terminal")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(Color(red: 229.0/255.0, green: 233.0/255.0, blue: 240.0/255.0))
+                }
+                .padding(.leading, 4)
             }
             .padding(.trailing, 12)
         }

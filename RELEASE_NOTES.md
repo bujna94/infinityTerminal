@@ -1,3 +1,6 @@
 ## What's Changed
-- **Refined pane name badge**: bigger 13pt monospaced text, opaque dark background flush with the pane's top-left corner, subtle white border, and only the inner corner is rounded. The terminal viewport now starts below the badge instead of behind it, so the first prompt line is no longer hidden under the label.
-- **Pencil (rename) button moved to the left** of the hover controls strip so it stays in the same place even when the swap buttons aren't available.
+- **Aligned pane header bar**: the name badge and the hover controls (rename / swap / hue / close) now share a single 28pt header bar with matching height and mirrored corner rounding (badge rounds bottom-trailing, controls round bottom-leading) so they sit at the exact same vertical level.
+- **Header strip follows the terminal's hue**: the area behind the badge / controls picks up the terminal's user-chosen background color from the hue swatch popover, so a "Red" pane gets a dark-red header strip, "Cyan" gets cyan, etc. The bars themselves stay slate so labels and icons remain readable.
+- **3pt breathing room** between the badge and the terminal's first row, so the prompt no longer crowds the bottom of the badge.
+- **Vertically centered traffic-light buttons**: close / minimize / zoom now sit on the same horizontal line as the toolbar contents instead of riding above them. A custom `NSWindow` subclass keeps them centered through every resize, including zoom / maximize.
+- **Toolbar layout**: the "Infinity Terminal" brand (logo + wordmark) moved to the far right, after the −/+ font-size stepper. The "Scroll left/right to add columns" hint moved next to the action buttons, just before Home.
