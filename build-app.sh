@@ -71,18 +71,6 @@ cp -r "${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle" \
 ICON_SRC="${BUILD_DIR}/${PRODUCT}_${PRODUCT}.bundle/AppIcon.icns"
 [ -f "${ICON_SRC}" ] && cp "${ICON_SRC}" "${APP_PATH}/Contents/Resources/AppIcon.icns"
 
-# ── Sparkle framework (auto-update) ──────────────────────────────────────────
-# SwiftPM downloads Sparkle as an XCFramework; we embed the macos slice into
-# the app bundle's Frameworks dir and let codesign sign it (deepest first)
-# below. Sparkle's Autoupdate helper, Updater.app, and XPCServices live
-# inside the framework already.
-SPARKLE_SRC=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
-if [ -d "${SPARKLE_SRC}" ]; then
-    mkdir -p "${APP_PATH}/Contents/Frameworks"
-    rm -rf "${APP_PATH}/Contents/Frameworks/Sparkle.framework"
-    cp -R "${SPARKLE_SRC}" "${APP_PATH}/Contents/Frameworks/Sparkle.framework"
-fi
-
 # ── Info.plist ────────────────────────────────────────────────────────────────
 cat > "${APP_PATH}/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -120,19 +108,6 @@ cat > "${APP_PATH}/Contents/Info.plist" << PLIST
     <string>NSApplication</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2025 Infinity Terminal. All rights reserved.</string>
-
-    <!-- Sparkle (auto-update). SUFeedURL points at the appcast hosted on
-         the website. SUPublicEDKey is the Ed25519 public key matching the
-         private key stored in the macOS keychain (entry name "ed25519").
-         See SPARKLE_SETUP.md for one-time setup. -->
-    <key>SUFeedURL</key>
-    <string>https://infinityterminal.com/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>zHKjehpLeorjXhF0tKWuoGYNKQUe9eYWeOQYJmQ2n5U=</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
 </dict>
 </plist>
 PLIST
@@ -143,25 +118,9 @@ chmod -R u+w "${APP_PATH}"
 xattr -cr "${APP_PATH}" 2>/dev/null || true
 
 # ── Code sign (Hardened Runtime + Developer ID) ───────────────────────────────
-# Sparkle's embedded helpers (XPC services, Updater.app, Autoupdate) must be
-# signed BEFORE the framework, the framework BEFORE the outer app — codesign
-# walks deepest-first.
-SPARKLE_FW="${APP_PATH}/Contents/Frameworks/Sparkle.framework"
-
 if security find-identity -v -p codesigning | grep -q "${SIGN_ID}"; then
     echo "→ Signing…"
-
-    xattr -cr "${APP_PATH}"
-
-    # Single --deep --force pass over the entire bundle. This re-signs
-    # Sparkle's helpers along with everything else with our Developer ID,
-    # Hardened Runtime, and a trusted timestamp, which is what the notary
-    # actually needs. Sparkle's docs caution against --deep because it
-    # forgets entitlements on inner targets, but our Sparkle helpers don't
-    # need entitlements (no sandbox) so this is safe and avoids the
-    # per-binary chain that was producing notarizable-on-disk-but-rejected
-    # signatures.
-    codesign --force --deep --options runtime --timestamp \
+    codesign --force --deep --options runtime \
         --entitlements "${ENTITLEMENTS_FILE}" \
         --sign "${SIGN_ID}" \
         "${APP_PATH}"
@@ -171,9 +130,6 @@ if security find-identity -v -p codesigning | grep -q "${SIGN_ID}"; then
     spctl --assess --type execute "${APP_PATH}" 2>&1 || echo "   (spctl: not yet notarized)"
 else
     echo "→ Signing with ad-hoc identity (Developer ID not found)…"
-    if [ -d "${SPARKLE_FW}" ]; then
-        codesign --force --deep --sign - "${SPARKLE_FW}"
-    fi
     codesign --force --deep --sign - "${APP_PATH}"
 fi
 
