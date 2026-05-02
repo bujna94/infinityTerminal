@@ -1,2 +1,3 @@
 ## What's Changed
-- **Name the terminals**: each pane now has an optional user-assigned label. Hover over a pane and click the pencil button in the controls strip to open a rename field — type a name and press Enter to save. The label appears as a small badge in the pane's top-left corner, persists across launches, and clears if you submit an empty name.
+- **Refined pane name badge**: bigger 13pt monospaced text, opaque dark background flush with the pane's top-left corner, subtle white border, and only the inner corner is rounded. The terminal viewport now starts below the badge instead of behind it, so the first prompt line is no longer hidden under the label.
+- **Pencil (rename) button moved to the left** of the hover controls strip so it stays in the same place even when the swap buttons aren't available.

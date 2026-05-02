@@ -182,6 +182,15 @@ struct TerminalPaneWrapper: View {
     @State private var showColorPicker = false
     @State private var showRename = false
 
+    /// Height reserved for the name badge so the terminal viewport starts
+    /// below it instead of having the first row hidden under the label.
+    private static let nameBadgeHeight: CGFloat = 28
+
+    private var hasName: Bool {
+        if let n = session.name { return !n.isEmpty }
+        return false
+    }
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             TerminalPaneView(session: session,
@@ -191,6 +200,7 @@ struct TerminalPaneWrapper: View {
                              },
                              gridModel: gridModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, hasName ? Self.nameBadgeHeight : 0)
 
             if session.isExited {
                 ExitOverlayView(exitCode: session.exitCode) {
@@ -199,17 +209,25 @@ struct TerminalPaneWrapper: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            // User-assigned name label, top-left. Always visible when set so
-            // the user can see which terminal is which without hovering.
+            // User-assigned name label, flush with the pane's top-left
+            // corner. Always visible when set so the user can see which
+            // terminal is which without hovering. Only the inner
+            // (bottom-trailing) corner is rounded — the outer two edges
+            // sit against the pane's borders.
             if let name = session.name, !name.isEmpty {
                 Text(name)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(Color(white: 0.85))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color(red: 0.07, green: 0.09, blue: 0.13).opacity(0.93))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .padding(6)
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundColor(Color(white: 0.9))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color(red: 0.07, green: 0.09, blue: 0.13))
+                    .clipShape(
+                        .rect(cornerRadii: RectangleCornerRadii(bottomTrailing: 6))
+                    )
+                    .overlay(
+                        UnevenRoundedRectangle(cornerRadii: RectangleCornerRadii(bottomTrailing: 6))
+                            .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+                    )
             }
 
             if isHovered || showColorPicker || showRename {
@@ -236,17 +254,8 @@ struct TerminalPaneWrapper: View {
         let canRight = columnIndex < gridModel.columns.count - 1
                     && sessionIndex < gridModel.columns[columnIndex + 1].sessions.count
         HStack(spacing: 1) {
-            if canLeft || canRight {
-                ctrlBtn("⇄", help: canLeft ? "Swap with pane to the left" : "Swap with pane to the right") {
-                    if canLeft { gridModel.movePaneLeft(columnIndex: columnIndex, sessionIndex: sessionIndex) }
-                    else       { gridModel.movePaneRight(columnIndex: columnIndex, sessionIndex: sessionIndex) }
-                }
-            }
-            if (col?.sessions.count ?? 0) == 2 {
-                ctrlBtn("⇅", help: "Swap top / bottom") { gridModel.swapVertically(columnIndex: columnIndex) }
-            }
-
-            // Rename — opens a small text-field popover.
+            // Rename — first in the strip so it stays in the same place
+            // regardless of which swap buttons happen to be available.
             Button(action: { showRename.toggle() }) {
                 Text("✎")
                     .font(.system(size: 11, weight: .medium))
@@ -258,6 +267,16 @@ struct TerminalPaneWrapper: View {
             .help("Rename pane")
             .popover(isPresented: $showRename, arrowEdge: .bottom) {
                 RenamePopover(session: session, isPresented: $showRename)
+            }
+
+            if canLeft || canRight {
+                ctrlBtn("⇄", help: canLeft ? "Swap with pane to the left" : "Swap with pane to the right") {
+                    if canLeft { gridModel.movePaneLeft(columnIndex: columnIndex, sessionIndex: sessionIndex) }
+                    else       { gridModel.movePaneRight(columnIndex: columnIndex, sessionIndex: sessionIndex) }
+                }
+            }
+            if (col?.sessions.count ?? 0) == 2 {
+                ctrlBtn("⇅", help: "Swap top / bottom") { gridModel.swapVertically(columnIndex: columnIndex) }
             }
 
             // Hue circle — background color picker
