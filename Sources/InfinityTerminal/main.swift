@@ -10,6 +10,7 @@ NSWindow.allowsAutomaticWindowTabbing = false  // suppresses "cannot index windo
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     let gridModel = TerminalGridModel()
+    let updater = Updater()
     private var monitors: [Any] = []
     /// Locked true for the entire duration of a horizontal trackpad gesture + momentum.
     private var isHorizontalScroll = false
@@ -38,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About Infinity Terminal", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        let updateItem = appMenu.addItem(withTitle: "Check for Updates…",
+                                         action: #selector(Updater.checkForUpdates(_:)),
+                                         keyEquivalent: "")
+        updateItem.target = updater
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Hide Infinity Terminal", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
