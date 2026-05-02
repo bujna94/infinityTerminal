@@ -128,7 +128,7 @@ cat > "${APP_PATH}/Contents/Info.plist" << PLIST
     <key>SUFeedURL</key>
     <string>https://infinityterminal.com/appcast.xml</string>
     <key>SUPublicEDKey</key>
-    <string>${SPARKLE_PUBLIC_ED_KEY:-}</string>
+    <string>zHKjehpLeorjXhF0tKWuoGYNKQUe9eYWeOQYJmQ2n5U=</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
     <key>SUScheduledCheckInterval</key>

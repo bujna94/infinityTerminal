@@ -97,3 +97,84 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
+      # ── Sparkle: sign the DMG with the EdDSA private key and append a new
+      # <item> to appcast.xml in the website repo. Self-skips at runtime if
+      # SPARKLE_PRIVATE_ED_KEY isn't set so the workflow stays green before
+      # one-time Sparkle setup is done.
+      - name: Sign DMG for Sparkle and update appcast
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+          WEB_REPO_PAT: ${{ secrets.WEB_REPO_PAT }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SPARKLE_PRIVATE_ED_KEY}" ]; then
+            echo "SPARKLE_PRIVATE_ED_KEY not set — skipping Sparkle sign + appcast publish."
+            exit 0
+          fi
+
+          # Pull Sparkle's CLI tools (sign_update lives in the binary release).
+          SPARKLE_VERSION=2.6.0
+          curl -sSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+            -o "$RUNNER_TEMP/sparkle.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+
+          DMG=$(ls .build/*.dmg | head -1)
+          DMG_NAME=$(basename "$DMG")
+          VERSION="${TAG#v}"
+
+          # Restore the private key into a temporary file
+          KEY_FILE="$RUNNER_TEMP/sparkle.key"
+          umask 077
+          echo "${SPARKLE_PRIVATE_ED_KEY}" | base64 --decode > "$KEY_FILE"
+
+          # sign_update outputs: sparkle:edSignature="..." length="..."
+          SIGN_OUT=$("$RUNNER_TEMP/sparkle/bin/sign_update" -f "$KEY_FILE" "$DMG")
+          rm -f "$KEY_FILE"
+          ED_SIG=$(echo "$SIGN_OUT" | sed -E 's/.*sparkle:edSignature="([^"]+)".*/\1/')
+          LEN=$(echo "$SIGN_OUT" | sed -E 's/.*length="([0-9]+)".*/\1/')
+          PUB_DATE=$(LC_TIME=en_US.UTF-8 date -u +"%a, %d %b %Y %H:%M:%S +0000")
+          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${DMG_NAME}"
+
+          # Clone the web repo, prepend a new <item> inside <channel>, push.
+          git clone --depth 1 "https://x-access-token:${WEB_REPO_PAT}@github.com/bujna94/infinityTerminalWeb.git" "$RUNNER_TEMP/web"
+          cd "$RUNNER_TEMP/web"
+
+          export VERSION PUB_DATE DOWNLOAD_URL LEN ED_SIG
+          python3 - <<'PYEOF'
+          import os
+          version = os.environ['VERSION']
+          pub_date = os.environ['PUB_DATE']
+          url = os.environ['DOWNLOAD_URL']
+          length = os.environ['LEN']
+          ed_sig = os.environ['ED_SIG']
+          with open('appcast.xml') as f: src = f.read()
+          item = f'''    <item>
+              <title>Version {version}</title>
+              <pubDate>{pub_date}</pubDate>
+              <sparkle:version>{version}</sparkle:version>
+              <sparkle:shortVersionString>{version}</sparkle:shortVersionString>
+              <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+              <enclosure
+                  url="{url}"
+                  length="{length}"
+                  type="application/octet-stream"
+                  sparkle:edSignature="{ed_sig}" />
+            </item>
+          '''
+          if '<language>en</language>' in src:
+              new = src.replace('<language>en</language>',
+                                '<language>en</language>\n' + item, 1)
+          else:
+              new = src.replace('</channel>', item + '  </channel>', 1)
+          with open('appcast.xml', 'w') as f: f.write(new)
+          PYEOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml
+          git commit -m "Append Sparkle appcast entry for ${TAG}"
+          git push origin main
