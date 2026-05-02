@@ -12,6 +12,9 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
     var onDataReceived: ((ArraySlice<UInt8>) -> Void)?
     /// Called on the main thread when the child shell process exits.
     var onProcessExited: (() -> Void)?
+    /// Called on a background queue when a periodic cwd poll detects a
+    /// change (used as a fallback for shells that don't emit OSC 7).
+    var onCwdPolled: ((String) -> Void)?
     /// The session this view belongs to. Used by the global mouse event
     /// monitor in AppDelegate to update `activeSessionID` when the user
     /// clicks a pane. (LocalProcessTerminalView's becomeFirstResponder /
@@ -19,6 +22,8 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
     var sessionID: UUID?
 
     private var pidMonitor: DispatchSourceProcess?
+    private var cwdPollTimer: DispatchSourceTimer?
+    private var lastPolledCwd: String?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
@@ -43,10 +48,50 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
         }
         source.resume()
         pidMonitor = source
+
+        startCwdPolling()
+    }
+
+    /// Periodically poll `proc_pidinfo` for the shell's current working
+    /// directory. Apple's default zsh emits OSC 7 (handled in the SwiftTerm
+    /// `hostCurrentDirectoryUpdate` delegate) so for the common case this
+    /// poll is redundant. Other shells (fish, nushell, custom configs)
+    /// don't emit OSC 7 — without this fallback their session restores
+    /// would always reopen at $HOME instead of where the user left off.
+    private func startCwdPolling() {
+        cwdPollTimer?.cancel()
+        let pid = process.shellPid
+        guard pid > 0 else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + 30, repeating: .seconds(30), leeway: .seconds(5))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            if let cwd = Self.cwdForPid(pid), cwd != self.lastPolledCwd {
+                self.lastPolledCwd = cwd
+                self.onCwdPolled?(cwd)
+            }
+        }
+        timer.resume()
+        cwdPollTimer = timer
+    }
+
+    private static func cwdForPid(_ pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = MemoryLayout<proc_vnodepathinfo>.size
+        let n = withUnsafeMutablePointer(to: &info) { ptr -> Int32 in
+            proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, ptr, Int32(size))
+        }
+        guard n == Int32(size) else { return nil }
+        return withUnsafePointer(to: &info.pvi_cdir.vip_path) { pathPtr in
+            pathPtr.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { c in
+                String(cString: c)
+            }
+        }
     }
 
     deinit {
         pidMonitor?.cancel()
+        cwdPollTimer?.cancel()
     }
 
     // Right-click context menu with Copy / Paste / Select All
@@ -137,6 +182,9 @@ struct TerminalPaneView: NSViewRepresentable {
             existing.sessionID = session.id
             context.coordinator.termView = existing
             existing.onProcessExited = onProcessExit
+            existing.onCwdPolled = { [weak coord = context.coordinator] cwd in
+                DispatchQueue.main.async { coord?.applyPolledCwd(cwd) }
+            }
             session.restartHandler = makeRestartHandler(coordinator: context.coordinator)
             return existing
         }
@@ -156,6 +204,9 @@ struct TerminalPaneView: NSViewRepresentable {
         tv.sessionID = session.id
         context.coordinator.termView = tv
         tv.onProcessExited = onProcessExit
+        tv.onCwdPolled = { [weak coord = context.coordinator] cwd in
+            DispatchQueue.main.async { coord?.applyPolledCwd(cwd) }
+        }
 
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let startDir = Self.validatedCwd(session.cwd)
@@ -208,10 +259,15 @@ struct TerminalPaneView: NSViewRepresentable {
             } else {
                 path = dir
             }
-            if session.cwd != path {
-                session.cwd = path
-                gridModel?.scheduleSave()
-            }
+            applyPolledCwd(path)
+        }
+
+        /// Update the session's cwd from any source (OSC 7 or the periodic
+        /// proc_pidinfo poll) and schedule a session save if it changed.
+        func applyPolledCwd(_ path: String) {
+            guard !path.isEmpty, session.cwd != path else { return }
+            session.cwd = path
+            gridModel?.scheduleSave()
         }
 
         func restartProcess() {

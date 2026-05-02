@@ -184,6 +184,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "0":        // ⌘0 — reset font size
                 DispatchQueue.main.async { self.gridModel.fontSize = 13 }
                 return nil
+            case "r":        // ⌘R — unbound; swallow it so the user doesn't
+                             // get a system "no command" beep when reaching
+                             // for the browser-reload muscle memory.
+                return nil
             default: break
             }
         }

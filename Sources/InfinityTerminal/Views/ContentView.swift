@@ -153,12 +153,27 @@ struct ContentView: View {
                         )
                     }
                 )
-                // Capture the NSScrollView once for smooth minimap drag scrolling
-                .background(ScrollViewSpy { sv in nativeScroll = sv })
+                // Capture the NSScrollView once for smooth minimap drag
+                // scrolling AND for applying a restored scroll offset on
+                // launch (the offset is saved into the session snapshot).
+                .background(ScrollViewSpy { sv in
+                    nativeScroll = sv
+                    if let target = gridModel.pendingScrollRestore {
+                        gridModel.pendingScrollRestore = nil
+                        DispatchQueue.main.async {
+                            sv.contentView.scroll(to: NSPoint(x: target, y: 0))
+                            sv.reflectScrolledClipView(sv.contentView)
+                            scrollOffset = target
+                        }
+                    }
+                })
             }
             .scrollBounceBehavior(.always, axes: .horizontal)
             .coordinateSpace(name: "hscroll")
-            .onPreferenceChange(ScrollOffsetKey.self) { scrollOffset = $0 }
+            .onPreferenceChange(ScrollOffsetKey.self) { newValue in
+                scrollOffset = newValue
+                gridModel.lastScrollLeft = newValue
+            }
             .onChange(of: scrollTarget) { _, target in
                 if let target {
                     withAnimation(.easeOut(duration: 0.3)) {
@@ -169,9 +184,14 @@ struct ContentView: View {
             }
             .onAppear {
                 // Scroll past the left + button so it starts hidden off-screen.
+                // Skip when the session restore is going to apply a non-zero
+                // scrollLeft — otherwise this jump-to-first-column would
+                // immediately clobber the restored offset.
                 DispatchQueue.main.async {
-                    scrollAnchor = .leading
-                    scrollTarget = gridModel.columns.first?.id
+                    if gridModel.pendingScrollRestore == nil && gridModel.lastScrollLeft <= 0 {
+                        scrollAnchor = .leading
+                        scrollTarget = gridModel.columns.first?.id
+                    }
                 }
             }
         }

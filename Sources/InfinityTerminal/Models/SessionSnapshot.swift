@@ -45,4 +45,6 @@ struct GridSnapshot: Codable, Equatable {
     var fontSize: CGFloat
     var activeColumn: Int?
     var activeSession: Int?
+    /// Horizontal scroll offset of the column grid at save time.
+    var scrollLeft: CGFloat?
 }

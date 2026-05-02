@@ -14,6 +14,12 @@ class TerminalGridModel: ObservableObject {
     /// active-pane highlight).
     @Published var activeSessionID: UUID?
 
+    /// Latest known horizontal scroll offset of the grid. Written by
+    /// ContentView's scroll preference observer; read at save time and
+    /// re-applied on launch. Not @Published — updates are continuous during
+    /// a scroll and would re-render every observer in the model.
+    var lastScrollLeft: CGFloat = 0
+
     /// ID of the first column created at launch / after reset — the "Home" anchor.
     private(set) var homeColumnID: UUID?
 
@@ -156,8 +162,13 @@ class TerminalGridModel: ObservableObject {
                             homeColumnIndex: homeIdx,
                             fontSize: fontSize,
                             activeColumn: activeCol,
-                            activeSession: activeSes)
+                            activeSession: activeSes,
+                            scrollLeft: lastScrollLeft)
     }
+
+    /// Restored scroll offset, read by ContentView once the layout is up so
+    /// the user lands where they left off rather than at home.
+    var pendingScrollRestore: CGFloat?
 
     /// Coalesce save calls — most layout changes happen in bursts (typing,
     /// dragging, etc.). 500ms is short enough to feel instant but skips the
@@ -214,6 +225,10 @@ class TerminalGridModel: ObservableObject {
         if let ci = snap.activeColumn, let si = snap.activeSession,
            ci < restoredColumns.count, si < restoredColumns[ci].sessions.count {
             self.activeSessionID = restoredColumns[ci].sessions[si].id
+        }
+        if let sl = snap.scrollLeft, sl > 0 {
+            self.lastScrollLeft = sl
+            self.pendingScrollRestore = sl
         }
         return true
     }
