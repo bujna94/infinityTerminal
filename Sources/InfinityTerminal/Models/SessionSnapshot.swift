@@ -48,4 +48,7 @@ struct GridSnapshot: Codable, Equatable {
     var activeSession: Int?
     /// Horizontal scroll offset of the column grid at save time.
     var scrollLeft: CGFloat?
+    /// Direction the column grid scrolls. Optional — older snapshots default
+    /// to `.horizontal` when this key is missing.
+    var scrollOrientation: ScrollOrientation?
 }

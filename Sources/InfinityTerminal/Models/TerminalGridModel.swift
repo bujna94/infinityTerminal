@@ -2,6 +2,12 @@ import Foundation
 import Combine
 import SwiftUI
 
+/// Direction the column grid scrolls in. `.horizontal` is the original layout
+/// (columns laid left→right, panes stacked top/bottom within each column);
+/// `.vertical` rotates the whole grid 90° (columns laid top→bottom, panes
+/// laid left/right within each column).
+enum ScrollOrientation: String, Codable { case horizontal, vertical }
+
 /// The top-level application state shared via `@EnvironmentObject`.
 class TerminalGridModel: ObservableObject {
     @Published var columns: [TerminalColumn] = []
@@ -9,6 +15,13 @@ class TerminalGridModel: ObservableObject {
     @Published var showShortcuts: Bool = false
     @Published var minimapHeight: CGFloat = 84
     @Published var fontSize: CGFloat = 13
+    @Published var scrollOrientation: ScrollOrientation = .horizontal {
+        didSet {
+            guard oldValue != scrollOrientation else { return }
+            scheduleSave()
+            NotificationCenter.default.post(name: .scrollOrientationChanged, object: nil)
+        }
+    }
 
     /// ID of the pane that currently has keyboard focus (used to draw the
     /// active-pane highlight).
@@ -56,6 +69,7 @@ class TerminalGridModel: ObservableObject {
     }
     func toggleMinimap()   { showMinimap.toggle() }
     func toggleShortcuts() { showShortcuts.toggle() }
+    func setScrollOrientation(_ o: ScrollOrientation) { scrollOrientation = o }
 
     // MARK: - Pane operations
 
@@ -164,7 +178,8 @@ class TerminalGridModel: ObservableObject {
                             fontSize: fontSize,
                             activeColumn: activeCol,
                             activeSession: activeSes,
-                            scrollLeft: lastScrollLeft)
+                            scrollLeft: lastScrollLeft,
+                            scrollOrientation: scrollOrientation)
     }
 
     /// Restored scroll offset, read by ContentView once the layout is up so
@@ -231,6 +246,7 @@ class TerminalGridModel: ObservableObject {
             self.lastScrollLeft = sl
             self.pendingScrollRestore = sl
         }
+        if let o = snap.scrollOrientation { self.scrollOrientation = o }
         return true
     }
 }

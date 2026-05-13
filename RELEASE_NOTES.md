@@ -1,6 +1,5 @@
 ## What's Changed
-- **Aligned pane header bar**: the name badge and the hover controls (rename / swap / hue / close) now share a single 28pt header bar with matching height and mirrored corner rounding (badge rounds bottom-trailing, controls round bottom-leading) so they sit at the exact same vertical level.
-- **Header strip follows the terminal's hue**: the area behind the badge / controls picks up the terminal's user-chosen background color from the hue swatch popover, so a "Red" pane gets a dark-red header strip, "Cyan" gets cyan, etc. The bars themselves stay slate so labels and icons remain readable.
-- **3pt breathing room** between the badge and the terminal's first row, so the prompt no longer crowds the bottom of the badge.
-- **Vertically centered traffic-light buttons**: close / minimize / zoom now sit on the same horizontal line as the toolbar contents instead of riding above them. A custom `NSWindow` subclass keeps them centered through every resize, including zoom / maximize.
-- **Toolbar layout**: the "Infinity Terminal" brand (logo + wordmark) moved to the far right, after the −/+ font-size stepper. The "Scroll left/right to add columns" hint moved next to the action buttons, just before Home.
+- **Experimental: vertical scrolling mode**. A new toggle flips the grid 90° — columns stack top-to-bottom with two side-by-side panes per row, and the canvas scrolls vertically instead of horizontally. Switch modes from the new **View** menu, or click the **↔ / ↕** segmented control in the toolbar. Choice persists across launches.
+- **Shift+scroll** in vertical mode moves the grid; plain vertical scroll continues to feed the terminal's own scrollback so existing terminal navigation is unchanged.
+- **Active-pane outline is twice as thick** (1pt → 2pt) so the focused terminal is easier to spot at a glance, especially in wide grids.
+- Layout under the hood now uses custom SwiftUI `Layout` types instead of `if/else` stack swapping, so the orientation toggle preserves running PTYs and their content across the flip.

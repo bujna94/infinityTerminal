@@ -354,47 +354,73 @@ struct TerminalColumnView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ForEach with stable session IDs — SwiftUI diffs and moves views
-            // in-place when sessions reorder, preserving NSViews and PTY processes.
-            ForEach(Array(column.sessions.enumerated()), id: \.element.id) { idx, session in
-                TerminalPaneWrapper(session: session, columnIndex: columnIndex, sessionIndex: idx)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .bottom) {
-                        if idx < column.sessions.count - 1 {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.10))
-                                .frame(height: 1)
-                        }
-                    }
-            }
+        // ColumnPanesLayout preserves view identity across orientation flips
+        // (the Layout's struct type stays the same; only its `orientation`
+        // field changes) AND explicitly proposes concrete sizes to its
+        // children, which propagates correctly through NSViewRepresentable
+        // to SwiftTerm's setFrameSize. AnyLayout fell short on that second
+        // requirement and left terminals stuck at tiny initial sizes.
+        ColumnPanesLayout(orientation: gridModel.scrollOrientation) {
+            paneList
         }
         .background(Color(red: 0.059, green: 0.067, blue: 0.090))
-        .overlay(alignment: .trailing) {
+        // Inter-column divider on the column's trailing edge: bottom in
+        // vertical mode (because columns stack top→bottom), right otherwise.
+        .overlay(alignment: gridModel.scrollOrientation == .horizontal ? .trailing : .bottom) {
             Rectangle()
                 .fill(Color.white.opacity(0.10))
-                .frame(width: 1)
+                .frame(
+                    width: gridModel.scrollOrientation == .horizontal ? 1 : nil,
+                    height: gridModel.scrollOrientation == .horizontal ? nil : 1
+                )
         }
-        // Active-pane outline. Drawn *after* the column's own right divider
-        // so the accent stroke covers it (no white-then-blue seam) and
-        // extended asymmetrically so it also lands on top of the *previous*
-        // column's right divider on the left, and onto the inter-pane
-        // horizontal divider above when the bottom pane is active.
-        // No transition animation — the outline snaps to whichever pane was
-        // just clicked.
+        // Active-pane outline. Drawn after the column divider so the accent
+        // stroke covers it (no seam). Geometry adapts to orientation: panes
+        // are split along Y in horizontal mode, along X in vertical mode.
         .overlay {
             GeometryReader { geo in
                 if let i = activeIndex {
                     let count = max(1, column.sessions.count)
-                    let h = geo.size.height / CGFloat(count)
-                    let topPad: CGFloat = i > 0 ? 1 : 0
-                    Rectangle()
-                        .strokeBorder(Self.accent.opacity(0.3), lineWidth: 1)
-                        .frame(width: geo.size.width + 1, height: h + topPad)
-                        .offset(x: -1, y: CGFloat(i) * h - topPad)
+                    let isH = gridModel.scrollOrientation == .horizontal
+                    let stroke: CGFloat = 2
+                    if isH {
+                        let h = geo.size.height / CGFloat(count)
+                        let topPad: CGFloat = i > 0 ? 1 : 0
+                        Rectangle()
+                            .strokeBorder(Self.accent.opacity(0.3), lineWidth: stroke)
+                            .frame(width: geo.size.width + 1, height: h + topPad)
+                            .offset(x: -1, y: CGFloat(i) * h - topPad)
+                    } else {
+                        let w = geo.size.width / CGFloat(count)
+                        let leftPad: CGFloat = i > 0 ? 1 : 0
+                        Rectangle()
+                            .strokeBorder(Self.accent.opacity(0.3), lineWidth: stroke)
+                            .frame(width: w + leftPad, height: geo.size.height + 1)
+                            .offset(x: CGFloat(i) * w - leftPad, y: -1)
+                    }
                 }
             }
             .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private var paneList: some View {
+        // ForEach with stable session IDs — SwiftUI diffs and moves views
+        // in-place when sessions reorder, preserving NSViews and PTY processes.
+        ForEach(Array(column.sessions.enumerated()), id: \.element.id) { idx, session in
+            TerminalPaneWrapper(session: session, columnIndex: columnIndex, sessionIndex: idx)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: gridModel.scrollOrientation == .horizontal ? .bottom : .trailing) {
+                    if idx < column.sessions.count - 1 {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.10))
+                            .frame(
+                                width: gridModel.scrollOrientation == .horizontal ? nil : 1,
+                                height: gridModel.scrollOrientation == .horizontal ? 1 : nil
+                            )
+                    }
+                }
         }
     }
 }
