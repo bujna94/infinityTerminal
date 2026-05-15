@@ -26,7 +26,26 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
     private var lastPolledCwd: String?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
+        // SwiftTerm's feed() pushes yDisp to yBase on every chunk, yanking the
+        // viewport to the bottom even when the user has scrolled up to read
+        // earlier output. We snapshot yDisp before super and, if the user was
+        // scrolled up, restore it by scrolling back up by the delta. When the
+        // user is already at the bottom (scrollPosition == 1) we skip this
+        // and let auto-follow run as normal.
+        let buffer = terminal.buffer
+        let preserveScrollback = !terminal.isCurrentBufferAlternate
+            && canScroll
+            && scrollPosition < 1.0
+        let savedYDisp = preserveScrollback ? buffer.yDisp : 0
+
         super.dataReceived(slice: slice)
+
+        if preserveScrollback {
+            let delta = buffer.yDisp - savedYDisp
+            if delta > 0 {
+                scrollUp(lines: delta)
+            }
+        }
         onDataReceived?(slice)
     }
 
