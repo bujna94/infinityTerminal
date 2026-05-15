@@ -211,6 +211,12 @@ struct TerminalPaneView: NSViewRepresentable {
         let tv = InfinityTerminalNSView(frame: .zero)
         session.cachedTermView = tv
 
+        // SwiftTerm's default scrollback is only 500 lines, which Claude Code
+        // and other verbose tools blow past in a single response — once the
+        // ring buffer trims, the absolute content under our preserved yDisp
+        // shifts and the viewport appears to drift toward the bottom.
+        tv.terminal.changeHistorySize(50_000)
+
         tv.nativeBackgroundColor = NSColor(red: 0.059, green: 0.067, blue: 0.090, alpha: 1.0)
         tv.nativeForegroundColor = NSColor(red: 229.0/255.0, green: 233.0/255.0, blue: 240.0/255.0, alpha: 1.0)
 
