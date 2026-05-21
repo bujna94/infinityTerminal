@@ -53,10 +53,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Locked true for the entire duration of a primary-axis trackpad gesture
     /// (horizontal in horizontal mode, vertical in vertical mode) + momentum.
     private var isPrimaryAxisScroll = false
-    /// Menu items kept so we can refresh their checkmarks when the model flips.
-    private var horizontalScrollItem: NSMenuItem?
-    private var verticalScrollItem: NSMenuItem?
-    private var orientationObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()
@@ -64,12 +60,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupKeyboardShortcuts()
         setupScrollInterception()
         setupFocusTracking()
-        // Update the View-menu checkmarks whenever the model emits a change
-        // (covers menu clicks plus any future programmatic flips).
-        orientationObserver = NotificationCenter.default.addObserver(
-            forName: .scrollOrientationChanged, object: nil, queue: .main
-        ) { [weak self] _ in self?.refreshViewMenuState() }
-        refreshViewMenuState()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -96,28 +86,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit Infinity Terminal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
-
-        // View menu — scroll-orientation toggle
-        let viewMenuItem = NSMenuItem()
-        mainMenu.addItem(viewMenuItem)
-        let viewMenu = NSMenu(title: "View")
-        let hItem = NSMenuItem(
-            title: "Horizontal Scrolling",
-            action: #selector(selectHorizontalScrolling(_:)),
-            keyEquivalent: ""
-        )
-        hItem.target = self
-        let vItem = NSMenuItem(
-            title: "Vertical Scrolling",
-            action: #selector(selectVerticalScrolling(_:)),
-            keyEquivalent: ""
-        )
-        vItem.target = self
-        viewMenu.addItem(hItem)
-        viewMenu.addItem(vItem)
-        viewMenuItem.submenu = viewMenu
-        horizontalScrollItem = hItem
-        verticalScrollItem = vItem
 
         // Window menu
         let windowMenuItem = NSMenuItem()
@@ -167,21 +135,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     //
     // onKeyPress never fires while the terminal NSView has focus, so we
     // intercept globally here. Returning nil consumes the event.
-
-    // MARK: View menu actions / state
-
-    @objc private func selectHorizontalScrolling(_ sender: Any?) {
-        gridModel.setScrollOrientation(.horizontal)
-    }
-
-    @objc private func selectVerticalScrolling(_ sender: Any?) {
-        gridModel.setScrollOrientation(.vertical)
-    }
-
-    private func refreshViewMenuState() {
-        horizontalScrollItem?.state = gridModel.scrollOrientation == .horizontal ? .on : .off
-        verticalScrollItem?.state   = gridModel.scrollOrientation == .vertical   ? .on : .off
-    }
 
     private func setupKeyboardShortcuts() {
         let m = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -296,22 +249,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let m = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             guard let self, event.window === self.window else { return event }
 
-            let dx = abs(event.scrollingDeltaX)
-            let dy = abs(event.scrollingDeltaY)
-
-            // Vertical mode shares its primary axis with the terminal's
-            // scrollback, so require Shift to disambiguate: plain vertical
-            // scroll → terminal scrollback; Shift+vertical → grid. Horizontal
-            // mode has no conflict (terminals don't scroll horizontally) so
-            // no modifier is needed.
-            if self.gridModel.scrollOrientation == .vertical
-                && !event.modifierFlags.contains(.shift) {
-                return event
-            }
-
-            // Primary axis = the axis the grid scrolls on, given orientation.
-            let primaryDelta   = self.gridModel.scrollOrientation == .horizontal ? dx : dy
-            let secondaryDelta = self.gridModel.scrollOrientation == .horizontal ? dy : dx
+            // The grid scrolls horizontally; the terminal owns vertical
+            // scrollback. Forward predominantly-horizontal gestures to the grid.
+            let primaryDelta   = abs(event.scrollingDeltaX)
+            let secondaryDelta = abs(event.scrollingDeltaY)
 
             // ── Direction locking ────────────────────────────────────────────
             // Lock primary/secondary at the START of each trackpad gesture so
@@ -423,9 +364,6 @@ extension Notification.Name {
     static let scrollColumnRight  = Notification.Name("InfinityTerminal.scrollColumnRight")
     /// Like jumpToStart but snaps instantly via NSScrollView (used after reset).
     static let jumpToStartInstant = Notification.Name("InfinityTerminal.jumpToStartInstant")
-    /// Fired by TerminalGridModel when the user flips horizontal ↔ vertical.
-    /// The AppDelegate watches this to refresh the View-menu checkmarks.
-    static let scrollOrientationChanged = Notification.Name("InfinityTerminal.scrollOrientationChanged")
 }
 
 // MARK: - Entry point

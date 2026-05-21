@@ -9,6 +9,10 @@ class TerminalColumn: ObservableObject, Identifiable {
     let id = UUID()
     @Published var sessions: [TerminalSession]
 
+    /// ID of the session currently expanded to fill the whole column (the
+    /// other pane collapses to a thin restore strip). `nil` = even split.
+    @Published var maximizedSessionID: UUID?
+
     init(sessions: [TerminalSession] = [TerminalSession(), TerminalSession()]) {
         self.sessions = sessions
     }

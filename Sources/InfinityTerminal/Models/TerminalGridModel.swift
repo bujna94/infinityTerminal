@@ -2,12 +2,6 @@ import Foundation
 import Combine
 import SwiftUI
 
-/// Direction the column grid scrolls in. `.horizontal` is the original layout
-/// (columns laid left→right, panes stacked top/bottom within each column);
-/// `.vertical` rotates the whole grid 90° (columns laid top→bottom, panes
-/// laid left/right within each column).
-enum ScrollOrientation: String, Codable { case horizontal, vertical }
-
 /// The top-level application state shared via `@EnvironmentObject`.
 class TerminalGridModel: ObservableObject {
     @Published var columns: [TerminalColumn] = []
@@ -15,13 +9,6 @@ class TerminalGridModel: ObservableObject {
     @Published var showShortcuts: Bool = false
     @Published var minimapHeight: CGFloat = 84
     @Published var fontSize: CGFloat = 13
-    @Published var scrollOrientation: ScrollOrientation = .horizontal {
-        didSet {
-            guard oldValue != scrollOrientation else { return }
-            scheduleSave()
-            NotificationCenter.default.post(name: .scrollOrientationChanged, object: nil)
-        }
-    }
 
     /// ID of the pane that currently has keyboard focus (used to draw the
     /// active-pane highlight).
@@ -69,7 +56,6 @@ class TerminalGridModel: ObservableObject {
     }
     func toggleMinimap()   { showMinimap.toggle() }
     func toggleShortcuts() { showShortcuts.toggle() }
-    func setScrollOrientation(_ o: ScrollOrientation) { scrollOrientation = o }
 
     // MARK: - Pane operations
 
@@ -81,6 +67,7 @@ class TerminalGridModel: ObservableObject {
         // Replacing the session object gives it a new ID → SwiftUI calls makeNSView
         // → a fresh shell process starts in the same visual slot.
         col.sessions[sessionIndex] = TerminalSession()
+        col.maximizedSessionID = nil
         scheduleSave()
     }
 
@@ -92,6 +79,7 @@ class TerminalGridModel: ObservableObject {
         for col in columns {
             if let idx = col.sessions.firstIndex(where: { $0.id == session.id }) {
                 col.sessions[idx] = TerminalSession()
+                col.maximizedSessionID = nil
                 scheduleSave()
                 return
             }
@@ -118,6 +106,8 @@ class TerminalGridModel: ObservableObject {
             let tmp = columns[columnIndex].sessions[sessionIndex]
             columns[columnIndex].sessions[sessionIndex] = columns[columnIndex - 1].sessions[sessionIndex]
             columns[columnIndex - 1].sessions[sessionIndex] = tmp
+            columns[columnIndex].maximizedSessionID = nil
+            columns[columnIndex - 1].maximizedSessionID = nil
         }
         scheduleSave()
     }
@@ -131,7 +121,32 @@ class TerminalGridModel: ObservableObject {
             let tmp = columns[columnIndex].sessions[sessionIndex]
             columns[columnIndex].sessions[sessionIndex] = columns[columnIndex + 1].sessions[sessionIndex]
             columns[columnIndex + 1].sessions[sessionIndex] = tmp
+            columns[columnIndex].maximizedSessionID = nil
+            columns[columnIndex + 1].maximizedSessionID = nil
         }
+        scheduleSave()
+    }
+
+    // MARK: - Pane maximize (vertical expansion)
+
+    /// Toggle full-column height for a pane. The other pane in the column is
+    /// hidden behind a thin restore strip (its shell keeps running) until the
+    /// split is restored — allowed at any time, the user decides.
+    func toggleMaximize(columnIndex: Int, sessionIndex: Int) {
+        guard columnIndex < columns.count else { return }
+        let col = columns[columnIndex]
+        guard col.sessions.count == 2, sessionIndex < col.sessions.count else { return }
+        let sid = col.sessions[sessionIndex].id
+        withAnimation(.spring(duration: 0.28)) {
+            col.maximizedSessionID = (col.maximizedSessionID == sid) ? nil : sid
+        }
+        scheduleSave()
+    }
+
+    /// Restore a column to an even split.
+    func clearMaximize(columnIndex: Int) {
+        guard columnIndex < columns.count, columns[columnIndex].maximizedSessionID != nil else { return }
+        withAnimation(.spring(duration: 0.28)) { columns[columnIndex].maximizedSessionID = nil }
         scheduleSave()
     }
 
@@ -178,8 +193,7 @@ class TerminalGridModel: ObservableObject {
                             fontSize: fontSize,
                             activeColumn: activeCol,
                             activeSession: activeSes,
-                            scrollLeft: lastScrollLeft,
-                            scrollOrientation: scrollOrientation)
+                            scrollLeft: lastScrollLeft)
     }
 
     /// Restored scroll offset, read by ContentView once the layout is up so
@@ -246,7 +260,6 @@ class TerminalGridModel: ObservableObject {
             self.lastScrollLeft = sl
             self.pendingScrollRestore = sl
         }
-        if let o = snap.scrollOrientation { self.scrollOrientation = o }
         return true
     }
 }

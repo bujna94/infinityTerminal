@@ -177,6 +177,11 @@ struct TerminalPaneWrapper: View {
     @ObservedObject var session: TerminalSession
     let columnIndex: Int
     let sessionIndex: Int
+    /// This pane is expanded to fill its column.
+    var isMaximized: Bool = false
+    /// This pane is the collapsed neighbor of a maximized pane (shown as a
+    /// thin restore strip).
+    var isCollapsed: Bool = false
 
     @State private var isHovered = false
     @State private var showColorPicker = false
@@ -245,6 +250,13 @@ struct TerminalPaneWrapper: View {
                     .frame(maxWidth: .infinity, alignment: .topTrailing)
                     .transition(.opacity)
             }
+
+            // When collapsed under a maximized neighbor, cover the squished
+            // terminal with a clickable restore strip (the PTY stays alive
+            // underneath). Clicking anywhere on it restores the even split.
+            if isCollapsed {
+                collapsedRestoreStrip
+            }
         }
         // Backdrop the whole pane with the terminal's own background so the
         // 28pt strip exposed above the terminal (when a name pushes it down)
@@ -293,6 +305,12 @@ struct TerminalPaneWrapper: View {
             }
             if (col?.sessions.count ?? 0) == 2 {
                 ctrlBtn("⇅", help: "Swap top / bottom") { gridModel.swapVertically(columnIndex: columnIndex) }
+                // Expand to fill the column / restore the even split. The other
+                // pane is hidden (not closed) while expanded.
+                ctrlBtn(isMaximized ? "❐" : "⛶",
+                        help: isMaximized ? "Restore split" : "Expand to fill column") {
+                    gridModel.toggleMaximize(columnIndex: columnIndex, sessionIndex: sessionIndex)
+                }
             }
 
             // Hue circle — background color picker
@@ -321,6 +339,35 @@ struct TerminalPaneWrapper: View {
             UnevenRoundedRectangle(cornerRadii: RectangleCornerRadii(bottomLeading: 6))
                 .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
         )
+    }
+
+    /// Thin clickable bar shown over a collapsed pane. Restores the even split.
+    private var collapsedRestoreStrip: some View {
+        Button {
+            gridModel.clearMaximize(columnIndex: columnIndex)
+        } label: {
+            ZStack {
+                Color(red: 0.07, green: 0.09, blue: 0.13)
+                HStack(spacing: 6) {
+                    Text("⛶")
+                        .font(.system(size: 12, weight: .medium))
+                    if let name = session.name, !name.isEmpty {
+                        Text(name).lineLimit(1)
+                    }
+                    Text("· click to restore")
+                        .foregroundColor(Color(white: 0.5))
+                        .lineLimit(1)
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(Color(white: 0.8))
+                .padding(.horizontal, 8)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Restore split")
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1), alignment: .top)
     }
 
     private func ctrlBtn(_ label: String, help: String, action: @escaping () -> Void) -> some View {
@@ -353,51 +400,41 @@ struct TerminalColumnView: View {
         return column.sessions.firstIndex(where: { $0.id == id })
     }
 
+    /// Index of the maximized pane within this column, or nil for even split.
+    private var maximizedIndex: Int? {
+        guard let mid = column.maximizedSessionID else { return nil }
+        return column.sessions.firstIndex(where: { $0.id == mid })
+    }
+
     var body: some View {
-        // ColumnPanesLayout preserves view identity across orientation flips
-        // (the Layout's struct type stays the same; only its `orientation`
-        // field changes) AND explicitly proposes concrete sizes to its
-        // children, which propagates correctly through NSViewRepresentable
-        // to SwiftTerm's setFrameSize. AnyLayout fell short on that second
-        // requirement and left terminals stuck at tiny initial sizes.
-        ColumnPanesLayout(orientation: gridModel.scrollOrientation) {
+        // ColumnPanesLayout explicitly proposes concrete sizes to its children,
+        // which propagates correctly through NSViewRepresentable to SwiftTerm's
+        // setFrameSize. A plain stack left terminals stuck at tiny initial sizes.
+        ColumnPanesLayout(maximizedIndex: maximizedIndex) {
             paneList
         }
         .background(Color(red: 0.059, green: 0.067, blue: 0.090))
-        // Inter-column divider on the column's trailing edge: bottom in
-        // vertical mode (because columns stack top→bottom), right otherwise.
-        .overlay(alignment: gridModel.scrollOrientation == .horizontal ? .trailing : .bottom) {
+        // Inter-column divider on the column's right edge.
+        .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(Color.white.opacity(0.10))
-                .frame(
-                    width: gridModel.scrollOrientation == .horizontal ? 1 : nil,
-                    height: gridModel.scrollOrientation == .horizontal ? nil : 1
-                )
+                .frame(width: 1)
         }
         // Active-pane outline. Drawn after the column divider so the accent
-        // stroke covers it (no seam). Geometry adapts to orientation: panes
-        // are split along Y in horizontal mode, along X in vertical mode.
+        // stroke covers it (no seam). Panes are split along Y.
         .overlay {
             GeometryReader { geo in
                 if let i = activeIndex {
                     let count = max(1, column.sessions.count)
-                    let isH = gridModel.scrollOrientation == .horizontal
                     let stroke: CGFloat = 2
-                    if isH {
-                        let h = geo.size.height / CGFloat(count)
-                        let topPad: CGFloat = i > 0 ? 1 : 0
-                        Rectangle()
-                            .strokeBorder(Self.accent.opacity(0.3), lineWidth: stroke)
-                            .frame(width: geo.size.width + 1, height: h + topPad)
-                            .offset(x: -1, y: CGFloat(i) * h - topPad)
-                    } else {
-                        let w = geo.size.width / CGFloat(count)
-                        let leftPad: CGFloat = i > 0 ? 1 : 0
-                        Rectangle()
-                            .strokeBorder(Self.accent.opacity(0.3), lineWidth: stroke)
-                            .frame(width: w + leftPad, height: geo.size.height + 1)
-                            .offset(x: CGFloat(i) * w - leftPad, y: -1)
-                    }
+                    let sizes = ColumnPanesLayout.extents(total: geo.size.height, count: count,
+                                                          maximizedIndex: maximizedIndex)
+                    let offset = sizes[..<i].reduce(0, +)
+                    let topPad: CGFloat = i > 0 ? 1 : 0
+                    Rectangle()
+                        .strokeBorder(Self.accent.opacity(0.3), lineWidth: stroke)
+                        .frame(width: geo.size.width + 1, height: sizes[i] + topPad)
+                        .offset(x: -1, y: offset - topPad)
                 }
             }
             .allowsHitTesting(false)
@@ -408,17 +445,19 @@ struct TerminalColumnView: View {
     private var paneList: some View {
         // ForEach with stable session IDs — SwiftUI diffs and moves views
         // in-place when sessions reorder, preserving NSViews and PTY processes.
+        let maxID = column.maximizedSessionID
+        let twoPanes = column.sessions.count == 2
         ForEach(Array(column.sessions.enumerated()), id: \.element.id) { idx, session in
-            TerminalPaneWrapper(session: session, columnIndex: columnIndex, sessionIndex: idx)
+            let isMaximized = maxID == session.id
+            let isCollapsed = twoPanes && maxID != nil && !isMaximized
+            TerminalPaneWrapper(session: session, columnIndex: columnIndex, sessionIndex: idx,
+                                isMaximized: isMaximized, isCollapsed: isCollapsed)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: gridModel.scrollOrientation == .horizontal ? .bottom : .trailing) {
+                .overlay(alignment: .bottom) {
                     if idx < column.sessions.count - 1 {
                         Rectangle()
                             .fill(Color.white.opacity(0.10))
-                            .frame(
-                                width: gridModel.scrollOrientation == .horizontal ? nil : 1,
-                                height: gridModel.scrollOrientation == .horizontal ? 1 : nil
-                            )
+                            .frame(height: 1)
                     }
                 }
         }

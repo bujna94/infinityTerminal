@@ -4,12 +4,11 @@ import AppKit
 
 // MARK: - Intercepting subclass
 
-/// A thin subclass of `LocalProcessTerminalView` that intercepts raw bytes
-/// arriving from the PTY so we can do SSH detection without interfering with
-/// the normal terminal rendering pipeline.
+/// A thin subclass of `LocalProcessTerminalView` that overrides `dataReceived`
+/// to preserve the user's scroll position and text selection while output
+/// streams, and watches the child PID for exit.
 final class InfinityTerminalNSView: LocalProcessTerminalView {
 
-    var onDataReceived: ((ArraySlice<UInt8>) -> Void)?
     /// Called on the main thread when the child shell process exits.
     var onProcessExited: (() -> Void)?
     /// Called on a background queue when a periodic cwd poll detects a
@@ -62,7 +61,6 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
                 scrollUp(lines: delta)
             }
         }
-        onDataReceived?(slice)
     }
 
     /// Start monitoring the child PID ourselves via a DispatchSource.

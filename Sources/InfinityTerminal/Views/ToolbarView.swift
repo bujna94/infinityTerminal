@@ -73,23 +73,6 @@ struct ToolbarView: View {
                     gridModel.toggleShortcuts()
                 }
 
-                // Scroll-orientation segmented control. Two adjacent buttons,
-                // the active one highlighted with the accent stroke.
-                HStack(spacing: 4) {
-                    ToolbarButton(
-                        label: "↔",
-                        isActive: gridModel.scrollOrientation == .horizontal
-                    ) {
-                        gridModel.setScrollOrientation(.horizontal)
-                    }
-                    ToolbarButton(
-                        label: "↕",
-                        isActive: gridModel.scrollOrientation == .vertical
-                    ) {
-                        gridModel.setScrollOrientation(.vertical)
-                    }
-                }
-
                 // Font size controls
                 HStack(spacing: 0) {
                     Button(action: {
