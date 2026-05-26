@@ -1,2 +1,2 @@
 ## What's Changed
-- **Microphone access.** Added `NSMicrophoneUsageDescription` so terminal programs that need audio input (e.g. voice commands) can prompt for and obtain microphone permission on first use.
+- **Microphone access now actually works.** Added the `com.apple.security.device.audio-input` entitlement; under Hardened Runtime, `NSMicrophoneUsageDescription` alone wasn't enough for macOS to even show the permission prompt, so terminal programs needing audio (e.g. Claude Code's `/voice`) were being silently denied.

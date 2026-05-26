@@ -16,8 +16,8 @@ if [ -f "$(dirname "$0")/.env" ]; then
 fi
 
 PRODUCT="InfinityTerminal"
-VERSION="1.0.22"
-BUILD_NUMBER="23"
+VERSION="1.0.23"
+BUILD_NUMBER="24"
 APP="${PRODUCT}.app"
 DMG="${PRODUCT}-${VERSION}.dmg"
 BUILD_DIR=".build/release"
@@ -42,6 +42,8 @@ cat > "${ENTITLEMENTS_FILE}" << 'EOF'
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <false/>
     <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.device.audio-input</key>
     <true/>
 </dict>
 </plist>
