@@ -16,8 +16,8 @@ if [ -f "$(dirname "$0")/.env" ]; then
 fi
 
 PRODUCT="InfinityTerminal"
-VERSION="1.0.21"
-BUILD_NUMBER="22"
+VERSION="1.0.22"
+BUILD_NUMBER="23"
 APP="${PRODUCT}.app"
 DMG="${PRODUCT}-${VERSION}.dmg"
 BUILD_DIR=".build/release"
@@ -106,6 +106,8 @@ cat > "${APP_PATH}/Contents/Info.plist" << PLIST
     <false/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Infinity Terminal needs microphone access so terminal programs you run (e.g. voice commands) can capture audio.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2025 Infinity Terminal. All rights reserved.</string>
 </dict>
