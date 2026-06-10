@@ -298,10 +298,26 @@ struct TerminalPaneWrapper: View {
             }
 
             if canLeft || canRight {
-                ctrlBtn("⇄", help: canLeft ? "Swap with pane to the left" : "Swap with pane to the right") {
+                // Emphasize the arrow for the direction the swap will actually
+                // go (left wins when both neighbors exist) so the button isn't
+                // ambiguous about which pane it trades places with.
+                Button {
                     if canLeft { gridModel.movePaneLeft(columnIndex: columnIndex, sessionIndex: sessionIndex) }
                     else       { gridModel.movePaneRight(columnIndex: columnIndex, sessionIndex: sessionIndex) }
+                } label: {
+                    HStack(spacing: 0) {
+                        Text("←")
+                            .font(.system(size: canLeft ? 12 : 8, weight: canLeft ? .bold : .regular))
+                            .foregroundColor(Color(white: canLeft ? 0.9 : 0.4))
+                        Text("→")
+                            .font(.system(size: canLeft ? 8 : 12, weight: canLeft ? .regular : .bold))
+                            .foregroundColor(Color(white: canLeft ? 0.4 : 0.9))
+                    }
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help(canLeft ? "Swap with pane to the left" : "Swap with pane to the right")
             }
             if (col?.sessions.count ?? 0) == 2 {
                 ctrlBtn("⇅", help: "Swap top / bottom") { gridModel.swapVertically(columnIndex: columnIndex) }
