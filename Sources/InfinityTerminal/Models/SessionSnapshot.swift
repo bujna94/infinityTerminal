@@ -48,4 +48,8 @@ struct GridSnapshot: Codable, Equatable {
     var activeSession: Int?
     /// Horizontal scroll offset of the column grid at save time.
     var scrollLeft: CGFloat?
+    /// Whether Option is treated as a Meta key (sends ESC sequences) rather
+    /// than typing the ⌥-composed character. Optional so snapshots written
+    /// before this field existed still decode (missing → nil → model default).
+    var useOptionAsMetaKey: Bool?
 }

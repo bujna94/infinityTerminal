@@ -173,6 +173,9 @@ final class TerminalSlot: NSView {
 struct TerminalPaneView: NSViewRepresentable {
     @ObservedObject var session: TerminalSession
     var fontSize: CGFloat = 13
+    /// Whether Option behaves as a Meta key. Driven by the app-wide setting on
+    /// TerminalGridModel; applied live to every pane via `updateNSView`.
+    var useOptionAsMetaKey: Bool = false
     var onProcessExit: (() -> Void)?
     /// Passed in so the coordinator can persist cwd updates and the slot can
     /// flip the active-pane highlight on click.
@@ -204,6 +207,9 @@ struct TerminalPaneView: NSViewRepresentable {
         if tv.font.pointSize != fontSize {
             tv.font = newFont
         }
+        if tv.optionAsMetaKey != useOptionAsMetaKey {
+            tv.optionAsMetaKey = useOptionAsMetaKey
+        }
     }
 
     // MARK: - PTY view lifecycle
@@ -224,6 +230,14 @@ struct TerminalPaneView: NSViewRepresentable {
 
         let tv = InfinityTerminalNSView(frame: .zero)
         session.cachedTermView = tv
+
+        // SwiftTerm defaults `optionAsMetaKey` to true, which swallows Option as
+        // a Meta modifier and sends ESC+<char> instead of the character the
+        // keyboard layout composes. On UK/international layouts that breaks
+        // Option-produced glyphs like # (⌥3), € (⌥2), etc. We default it off
+        // (Option types the composed character, matching Terminal.app) but let
+        // the user flip it from the toolbar / ⌘⌥O — see `useOptionAsMetaKey`.
+        tv.optionAsMetaKey = useOptionAsMetaKey
 
         // SwiftTerm's default scrollback is only 500 lines, which Claude Code
         // and other verbose tools blow past in a single response — once the

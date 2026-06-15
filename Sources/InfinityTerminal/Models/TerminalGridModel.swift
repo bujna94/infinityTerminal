@@ -10,6 +10,12 @@ class TerminalGridModel: ObservableObject {
     @Published var minimapHeight: CGFloat = 84
     @Published var fontSize: CGFloat = 13
 
+    /// When true, Option acts as a Meta modifier (sends ESC+<char>); when
+    /// false (default) Option types the character the keyboard layout composes
+    /// — e.g. ⌥3 → #. Mirrors SwiftTerm's `optionAsMetaKey`, surfaced here so
+    /// it can be toggled from the UI and persisted across launches.
+    @Published var useOptionAsMetaKey: Bool = false
+
     /// ID of the pane that currently has keyboard focus (used to draw the
     /// active-pane highlight).
     @Published var activeSessionID: UUID?
@@ -56,6 +62,9 @@ class TerminalGridModel: ObservableObject {
     }
     func toggleMinimap()   { showMinimap.toggle() }
     func toggleShortcuts() { showShortcuts.toggle() }
+    /// Persisted immediately (unlike the view-only minimap/shortcuts toggles)
+    /// so the preference survives the next launch.
+    func toggleOptionAsMeta() { useOptionAsMetaKey.toggle(); scheduleSave() }
 
     // MARK: - Pane operations
 
@@ -193,7 +202,8 @@ class TerminalGridModel: ObservableObject {
                             fontSize: fontSize,
                             activeColumn: activeCol,
                             activeSession: activeSes,
-                            scrollLeft: lastScrollLeft)
+                            scrollLeft: lastScrollLeft,
+                            useOptionAsMetaKey: useOptionAsMetaKey)
     }
 
     /// Restored scroll offset, read by ContentView once the layout is up so
@@ -251,6 +261,9 @@ class TerminalGridModel: ObservableObject {
         }
         if snap.fontSize >= Self.fontSizeMin && snap.fontSize <= Self.fontSizeMax {
             self.fontSize = snap.fontSize
+        }
+        if let meta = snap.useOptionAsMetaKey {
+            self.useOptionAsMetaKey = meta
         }
         if let ci = snap.activeColumn, let si = snap.activeSession,
            ci < restoredColumns.count, si < restoredColumns[ci].sessions.count {

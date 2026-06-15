@@ -73,6 +73,16 @@ struct ToolbarView: View {
                     gridModel.toggleShortcuts()
                 }
 
+                ToolbarButton(
+                    label: "⌥ Meta",
+                    isActive: gridModel.useOptionAsMetaKey,
+                    help: gridModel.useOptionAsMetaKey
+                        ? "Option sends Meta/ESC sequences (e.g. ⌥B word-jump). Click to type ⌥-composed characters like # instead. (⌘⌥O)"
+                        : "Option types composed characters like # (⌥3). Click to use Option as a Meta key for ESC sequences. (⌘⌥O)"
+                ) {
+                    gridModel.toggleOptionAsMeta()
+                }
+
                 // Font size controls
                 HStack(spacing: 0) {
                     Button(action: {
@@ -157,6 +167,7 @@ struct ToolbarView: View {
 struct ToolbarButton: View {
     let label: String
     var isActive: Bool = false
+    var help: String = ""
     let action: () -> Void
 
     @State private var isHovered = false
@@ -186,5 +197,6 @@ struct ToolbarButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .help(help)
     }
 }

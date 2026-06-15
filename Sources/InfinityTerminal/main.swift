@@ -195,6 +195,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             default: break
             }
+            // ⌘⌥O — toggle Option-as-Meta. SwiftTerm has its own ⌘⌥O handler
+            // that flips the flag directly on the focused view; we intercept it
+            // first and route through the app-wide setting so the toolbar state
+            // and the persisted snapshot stay in sync (and all panes update).
+            if ch == "o" {
+                DispatchQueue.main.async { self.gridModel.toggleOptionAsMeta() }
+                return nil
+            }
         }
 
         if f == .command && ch == "/" {

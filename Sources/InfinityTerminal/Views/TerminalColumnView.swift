@@ -210,6 +210,7 @@ struct TerminalPaneWrapper: View {
         ZStack(alignment: .topLeading) {
             TerminalPaneView(session: session,
                              fontSize: gridModel.fontSize,
+                             useOptionAsMetaKey: gridModel.useOptionAsMetaKey,
                              onProcessExit: { [session, gridModel] in
                                  gridModel.closePane(session: session)
                              },
