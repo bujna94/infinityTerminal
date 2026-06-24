@@ -37,14 +37,18 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
             && scrollPosition < 1.0
         let savedYDisp = preserveScrollback ? buffer.yDisp : 0
 
-        // SwiftTerm's feedPrepare/linefeed wipe the active selection on every
-        // chunk whenever `allowMouseReporting` is on — even if the application
-        // hasn't actually requested mouse reporting. That makes it impossible
-        // to select text in a pane while Claude Code (or any streaming tool)
-        // is producing output. When the terminal's mouse mode is .off the app
-        // isn't using mouse input anyway, so we temporarily drop the flag for
-        // the duration of the feed and restore it after.
-        let suppressSelectionWipe = (terminal.mouseMode == .off) && allowMouseReporting
+        // SwiftTerm's feedPrepare() clears the active selection on every chunk
+        // whenever `allowMouseReporting` is on. That wipes a manual selection
+        // the instant a streaming tool emits output — and Claude Code redraws
+        // constantly, so a selection there vanishes right after you make it
+        // (the selected range survives, which is why ⌘C still copies, but the
+        // highlight disappears). Temporarily drop the flag for the duration of
+        // the feed so the selection stays visible: always for non-mouse panes,
+        // and for mouse-reporting panes (Claude) whenever a selection is
+        // actually active. Toggling the flag only affects this wipe — no mouse
+        // events arrive mid-feed, so reporting is unaffected.
+        let suppressSelectionWipe = allowMouseReporting
+            && (terminal.mouseMode == .off || selectionActive)
         if suppressSelectionWipe {
             allowMouseReporting = false
         }

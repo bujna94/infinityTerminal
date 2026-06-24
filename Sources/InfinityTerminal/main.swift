@@ -219,6 +219,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        // Option+← / Option+→ — word-wise cursor movement, independent of the
+        // Option-as-Meta setting. Arrows aren't composable characters, so ⌥
+        // should always mean "by word" here (as in Terminal.app / iTerm2).
+        // SwiftTerm only emits this when optionAsMetaKey is on, so we do it
+        // ourselves: ⌥← → ESC b (backward-word), ⌥→ → ESC f (forward-word).
+        if f == .option, event.keyCode == 123 || event.keyCode == 124,
+           let term = focusedTerminal() {
+            term.send(event.keyCode == 123 ? [0x1b, 0x62] : [0x1b, 0x66])
+            return nil
+        }
+
         // Cmd+C / Cmd+V — route through the responder chain so SwiftTerm's
         // built-in copy/paste actions fire on whichever terminal has focus.
         if f == .command {
@@ -251,6 +262,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return event
+    }
+
+    /// The terminal view that currently has keyboard focus, found by walking
+    /// the key window's responder chain. Used to send synthesized input (e.g.
+    /// the ⌥-arrow word-motion sequences) to the right pane.
+    private func focusedTerminal() -> InfinityTerminalNSView? {
+        var responder: NSResponder? = window?.firstResponder
+        while let cur = responder {
+            if let term = cur as? InfinityTerminalNSView { return term }
+            responder = cur.nextResponder
+        }
+        return nil
     }
 
     // MARK: - Horizontal scroll interception

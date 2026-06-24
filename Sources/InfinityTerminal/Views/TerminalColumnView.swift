@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 // MARK: - Hue wheel shape (conic gradient ring)
 
@@ -190,6 +189,7 @@ struct TerminalPaneWrapper: View {
     @State private var isHovered = false
     @State private var showColorPicker = false
     @State private var showRename = false
+    @State private var showCloseConfirm = false
 
     /// Height reserved for the name badge so the terminal viewport starts
     /// below it instead of having the first row hidden under the label.
@@ -260,7 +260,7 @@ struct TerminalPaneWrapper: View {
                     .transition(.opacity)
             }
 
-            if isHovered || showColorPicker || showRename {
+            if isHovered || showColorPicker || showRename || showCloseConfirm {
                 paneControls
                     .frame(maxWidth: .infinity, alignment: .topTrailing)
                     .transition(.opacity)
@@ -284,6 +284,7 @@ struct TerminalPaneWrapper: View {
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.easeInOut(duration: 0.15), value: showColorPicker)
         .animation(.easeInOut(duration: 0.15), value: showRename)
+        .animation(.easeInOut(duration: 0.15), value: showCloseConfirm)
     }
 
     // MARK: Control strip
@@ -349,10 +350,13 @@ struct TerminalPaneWrapper: View {
                 gridModel.refreshPane(session: session)
             }
 
-            // Actually close this pane (after confirming). Two-pane column →
-            // survivor grows; sole pane → the whole column closes.
+            // Actually close this pane — confirm first in a small bubble under
+            // the ✕. Two-pane column → survivor grows; sole pane → column closes.
             ctrlBtn("✕", help: "Close pane") {
-                confirmClose()
+                showCloseConfirm.toggle()
+            }
+            .popover(isPresented: $showCloseConfirm, arrowEdge: .bottom) {
+                closeConfirmPopover
             }
         }
         .padding(.horizontal, 6)
@@ -429,21 +433,36 @@ struct TerminalPaneWrapper: View {
         .help(atTop ? "Add a pane above" : "Add a pane below")
     }
 
-    /// Confirm before actually closing — closing kills the pane's shell and
-    /// whatever it's running, so a stray ✕ click shouldn't be destructive.
-    private func confirmClose() {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        if let n = session.name, !n.isEmpty {
-            alert.messageText = "Close “\(n)”?"
-        } else {
-            alert.messageText = "Close this terminal?"
+    /// Confirmation bubble shown under the ✕ button — closing kills the pane's
+    /// shell and whatever it's running, so a stray click shouldn't be
+    /// destructive. Cancel dismisses; the red Close button removes the pane.
+    private var closeConfirmPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(closeConfirmTitle)
+                .font(.system(size: 12, weight: .medium))
+            Text("The running shell and anything in it will be stopped.")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Cancel") { showCloseConfirm = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Close", role: .destructive) {
+                    showCloseConfirm = false
+                    let s = session
+                    DispatchQueue.main.async { gridModel.closePane(session: s) }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
         }
-        alert.informativeText = "The running shell — and anything it's running (claude, vim, npm…) — will be stopped."
-        alert.addButton(withTitle: "Cancel")   // default — Return / Esc cancels
-        alert.addButton(withTitle: "Close")
-        guard alert.runModal() == .alertSecondButtonReturn else { return }
-        gridModel.closePane(session: session)
+        .padding(12)
+        .frame(width: 240)
+    }
+
+    private var closeConfirmTitle: String {
+        if let n = session.name, !n.isEmpty { return "Close “\(n)”?" }
+        return "Close this terminal?"
     }
 
     private func ctrlBtn(_ label: String, help: String, action: @escaping () -> Void) -> some View {
