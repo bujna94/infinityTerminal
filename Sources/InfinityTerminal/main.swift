@@ -54,6 +54,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (horizontal in horizontal mode, vertical in vertical mode) + momentum.
     private var isPrimaryAxisScroll = false
 
+    /// A plain left-drag should select text the way it always did, even in a
+    /// pane where the program turned on mouse reporting (Claude Code, vim,
+    /// htop…). When a recent Claude build started grabbing the mouse, those
+    /// drags began going to the app instead, breaking drag-to-copy. So for a
+    /// modifier-free drag we temporarily drop that pane's mouse reporting and
+    /// let SwiftTerm make a native selection (restored on mouse-up). Holding ⌥
+    /// keeps reporting on, sending the click through to the program.
+    private weak var selectionBypassTerm: InfinityTerminalNSView?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()
         setupWindow()
@@ -281,7 +290,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 shouldForward = self.isPrimaryAxisScroll
             }
-            guard shouldForward else { return event }
+            if !shouldForward {
+                // Vertical scroll → the terminal's job. On the *normal* buffer
+                // SwiftTerm scrolls its scrollback (return the event). But on
+                // the *alternate* buffer (Claude Code, less, vim, htop…) there
+                // is no scrollback, and SwiftTerm never forwards the wheel to
+                // the program — so the pane looks frozen. Hand the wheel to the
+                // pane, which forwards it to the child app when it's on the alt
+                // buffer (mouse-wheel events or arrow keys).
+                let pt = event.locationInWindow
+                if let hit = self.window?.contentView?.hitTest(pt) {
+                    var v: NSView? = hit
+                    while let cur = v {
+                        if let term = cur as? InfinityTerminalNSView {
+                            if term.forwardWheelToAltBuffer(event) { return nil }
+                            break
+                        }
+                        v = cur.superview
+                    }
+                }
+                return event
+            }
 
             // ── Find the outermost NSScrollView ──────────────────────────────
             // Walking to the *first* ancestor might stop at SwiftTerm's own
@@ -350,6 +379,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         self.gridModel.activeSessionID = sid
                         self.gridModel.scheduleSave()
                     }
+                    // A plain (no-⌥) drag selects text even when the program is
+                    // grabbing the mouse — drop reporting for this gesture so
+                    // SwiftTerm makes a native selection; restored on mouse-up
+                    // below. Holding ⌥ keeps reporting on (click goes to the app).
+                    if !event.modifierFlags.contains(.option),
+                       term.allowMouseReporting, term.terminal.mouseMode != .off {
+                        term.allowMouseReporting = false
+                        self.selectionBypassTerm = term
+                    }
                     break
                 }
                 v = cur.superview
@@ -357,6 +395,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return event
         }
         monitors.append(m!)
+
+        // Restore mouse reporting after an ⌥-drag selection completes. Async so
+        // SwiftTerm's own mouseUp runs first (with reporting still off) — that
+        // way the gesture's release isn't forwarded to the app as a stray click.
+        let up = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [weak self] event in
+            if self?.selectionBypassTerm != nil {
+                DispatchQueue.main.async {
+                    self?.selectionBypassTerm?.allowMouseReporting = true
+                    self?.selectionBypassTerm = nil
+                }
+            }
+            return event
+        }
+        monitors.append(up!)
     }
 
     deinit { monitors.forEach { NSEvent.removeMonitor($0) } }

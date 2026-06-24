@@ -68,31 +68,85 @@ class TerminalGridModel: ObservableObject {
 
     // MARK: - Pane operations
 
-    /// Close a pane — always replace with a fresh session so columns keep two panes.
-    func closePane(columnIndex: Int, sessionIndex: Int) {
-        guard columnIndex < columns.count else { return }
-        let col = columns[columnIndex]
-        guard sessionIndex < col.sessions.count else { return }
-        // Replacing the session object gives it a new ID → SwiftUI calls makeNSView
-        // → a fresh shell process starts in the same visual slot.
-        col.sessions[sessionIndex] = TerminalSession()
-        col.maximizedSessionID = nil
+    /// Find the (column, session) index of a session by identity. Safe against
+    /// stale positional indices after a swap, since it locates by ID.
+    private func locate(_ session: TerminalSession) -> (column: Int, session: Int)? {
+        for (ci, col) in columns.enumerated() {
+            if let si = col.sessions.firstIndex(where: { $0.id == session.id }) {
+                return (ci, si)
+            }
+        }
+        return nil
+    }
+
+    /// Refresh a pane — replace its shell with a brand-new session in the same
+    /// slot (a new ID → SwiftUI calls makeNSView → a fresh shell starts). This
+    /// is what the "✕" button used to do; it's now the "↻" button, and it's
+    /// also what a shell process exiting falls back to.
+    func refreshPane(session: TerminalSession) {
+        guard let loc = locate(session) else { return }
+        columns[loc.column].sessions[loc.session] = TerminalSession()
+        columns[loc.column].maximizedSessionID = nil
         scheduleSave()
     }
 
-    /// Close the pane hosting `session`, wherever it currently lives.
-    /// Exit handlers on cached NSViews are wired up once and never refreshed
-    /// by `updateNSView`, so they must not rely on positional indices that
-    /// become stale after a swap.
+    /// Actually close a pane, removing it from its column.
+    ///
+    /// - A column with two panes loses the pane; the survivor grows to fill the
+    ///   column (and offers ＋ strips to add a second one back).
+    /// - Closing the sole pane of a column removes the whole column.
+    /// - …unless it's the last pane in the grid: we keep one live terminal by
+    ///   refreshing it rather than leaving an empty window.
     func closePane(session: TerminalSession) {
-        for col in columns {
-            if let idx = col.sessions.firstIndex(where: { $0.id == session.id }) {
-                col.sessions[idx] = TerminalSession()
+        guard let loc = locate(session) else { return }
+        closePane(columnIndex: loc.column, sessionIndex: loc.session)
+    }
+
+    func closePane(columnIndex ci: Int, sessionIndex si: Int) {
+        guard ci < columns.count else { return }
+        let col = columns[ci]
+        guard si < col.sessions.count else { return }
+
+        if col.sessions.count > 1 {
+            // Two panes → drop this one; the survivor fills the column.
+            withAnimation(.spring(duration: 0.28)) {
+                col.sessions.remove(at: si)
                 col.maximizedSessionID = nil
-                scheduleSave()
-                return
             }
+        } else if columns.count > 1 {
+            // Last pane in a non-last column → remove the whole column. The
+            // grid strip animates this via ContentView's columns-id animation.
+            columns.remove(at: ci)
+            if let hid = homeColumnID, !columns.contains(where: { $0.id == hid }) {
+                homeColumnID = columns.first?.id
+            }
+        } else {
+            // The final terminal in the grid — never leave an empty window;
+            // restart it in place instead.
+            col.sessions[si] = TerminalSession()
+            col.maximizedSessionID = nil
         }
+
+        // If the active pane was the one we removed, move focus to something
+        // that still exists so the active-pane outline doesn't vanish.
+        if let aid = activeSessionID,
+           !columns.contains(where: { $0.sessions.contains { $0.id == aid } }) {
+            activeSessionID = columns.first?.sessions.first?.id
+        }
+        scheduleSave()
+    }
+
+    /// Add a second pane back to a single-pane column, above or below the
+    /// survivor. Surfaced by the ＋ strips on a sole pane.
+    func addPane(columnIndex ci: Int, atTop: Bool) {
+        guard ci < columns.count else { return }
+        let col = columns[ci]
+        guard col.sessions.count == 1 else { return }
+        withAnimation(.spring(duration: 0.28)) {
+            col.sessions.insert(TerminalSession(), at: atTop ? 0 : 1)
+            col.maximizedSessionID = nil
+        }
+        scheduleSave()
     }
 
     /// Swap the two sessions within a column (top ↔ bottom).

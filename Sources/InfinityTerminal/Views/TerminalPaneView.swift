@@ -63,6 +63,53 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
         }
     }
 
+    /// Make the scroll wheel work inside full-screen apps (Claude Code, less,
+    /// vim, htop…).
+    ///
+    /// Those apps switch the terminal to the *alternate* screen buffer, which
+    /// has no scrollback. SwiftTerm's default `scrollWheel` only ever scrolls
+    /// its own scrollback and never forwards the wheel to the program, so on
+    /// the alt buffer the wheel scrolls nothing *and* the app never hears about
+    /// it — the pane feels frozen. (This is why scrolling "suddenly stopped"
+    /// in Claude Code: a newer build moved its UI onto the alt buffer.)
+    ///
+    /// `scrollWheel` is `public` but not `open`, so we can't override it across
+    /// the module boundary — instead a `.scrollWheel` event monitor in
+    /// AppDelegate routes wheel events here. On the alt buffer we forward the
+    /// wheel to the child the way Terminal.app / iTerm2 do: as xterm
+    /// wheel-button events when the app has mouse reporting on, otherwise as
+    /// Up/Down arrow keys. Returns `true` if it consumed the event; `false`
+    /// leaves SwiftTerm's normal-buffer scrollback scrolling untouched.
+    func forwardWheelToAltBuffer(_ event: NSEvent) -> Bool {
+        guard terminal.isCurrentBufferAlternate, event.deltaY != 0 else { return false }
+
+        let up = event.deltaY > 0
+        let steps = min(max(Int(abs(event.deltaY).rounded()), 1), 5)
+
+        if allowMouseReporting && terminal.mouseMode != .off {
+            // App wants mouse input → send wheel-up/down (xterm buttons 4/5).
+            // Scroll handlers ignore the cell position, but compute a sane one.
+            let cols = terminal.cols, rows = terminal.rows
+            var x = 0, y = 0
+            if bounds.width > 0, bounds.height > 0 {
+                let p = convert(event.locationInWindow, from: nil)
+                x = min(max(Int(p.x / bounds.width * CGFloat(cols)), 0), cols - 1)
+                y = min(max(Int((bounds.height - p.y) / bounds.height * CGFloat(rows)), 0), rows - 1)
+            }
+            let flags = terminal.encodeButton(button: up ? 4 : 5, release: false,
+                                              shift: false, meta: false, control: false)
+            for _ in 0..<steps { terminal.sendEvent(buttonFlags: flags, x: x, y: y) }
+        } else {
+            // No mouse reporting (e.g. a pager) → emulate arrow keys, honoring
+            // DECCKM application-cursor mode.
+            let seq: [UInt8] = up
+                ? (terminal.applicationCursor ? [0x1b, 0x4f, 0x41] : [0x1b, 0x5b, 0x41])   // Up
+                : (terminal.applicationCursor ? [0x1b, 0x4f, 0x42] : [0x1b, 0x5b, 0x42])   // Down
+            for _ in 0..<steps { send(seq) }
+        }
+        return true
+    }
+
     /// Start monitoring the child PID ourselves via a DispatchSource.
     /// SwiftTerm's weak-delegate chain is unreliable with SwiftUI, so we
     /// bypass it entirely and watch the PID directly.

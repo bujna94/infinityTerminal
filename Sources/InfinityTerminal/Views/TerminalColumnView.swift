@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Hue wheel shape (conic gradient ring)
 
@@ -182,6 +183,9 @@ struct TerminalPaneWrapper: View {
     /// This pane is the collapsed neighbor of a maximized pane (shown as a
     /// thin restore strip).
     var isCollapsed: Bool = false
+    /// This is the only pane left in its column (the other was closed). On
+    /// hover it offers ＋ strips to add a second pane back above or below.
+    var isSolePane: Bool = false
 
     @State private var isHovered = false
     @State private var showColorPicker = false
@@ -212,7 +216,9 @@ struct TerminalPaneWrapper: View {
                              fontSize: gridModel.fontSize,
                              useOptionAsMetaKey: gridModel.useOptionAsMetaKey,
                              onProcessExit: { [session, gridModel] in
-                                 gridModel.closePane(session: session)
+                                 // A shell exiting respawns in place (unchanged
+                                 // behavior) — only the ✕ button truly closes.
+                                 gridModel.refreshPane(session: session)
                              },
                              gridModel: gridModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -244,6 +250,14 @@ struct TerminalPaneWrapper: View {
                         UnevenRoundedRectangle(cornerRadii: RectangleCornerRadii(bottomTrailing: 6))
                             .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
                     )
+            }
+
+            // A sole pane (its column-mate was closed) offers ＋ pills at the
+            // top and bottom edges on hover to add a second pane back, choosing
+            // which half the new pane takes.
+            if isSolePane && isHovered && !session.isExited {
+                addPaneAffordances
+                    .transition(.opacity)
             }
 
             if isHovered || showColorPicker || showRename {
@@ -330,8 +344,15 @@ struct TerminalPaneWrapper: View {
                 HuePickerPopover(session: session, isPresented: $showColorPicker)
             }
 
+            // Restart the shell in this pane (what ✕ used to do).
+            ctrlBtn("↻", help: "Restart pane (fresh shell)") {
+                gridModel.refreshPane(session: session)
+            }
+
+            // Actually close this pane (after confirming). Two-pane column →
+            // survivor grows; sole pane → the whole column closes.
             ctrlBtn("✕", help: "Close pane") {
-                gridModel.closePane(columnIndex: columnIndex, sessionIndex: sessionIndex)
+                confirmClose()
             }
         }
         .padding(.horizontal, 6)
@@ -373,6 +394,56 @@ struct TerminalPaneWrapper: View {
         .help("Restore split")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1), alignment: .top)
+    }
+
+    /// ＋ pills pinned to the top and bottom edges of a sole pane. Top adds a
+    /// pane above the survivor, bottom adds one below.
+    private var addPaneAffordances: some View {
+        VStack {
+            addPanePill(atTop: true)
+                .padding(.top, 6)
+            Spacer(minLength: 0)
+            addPanePill(atTop: false)
+                .padding(.bottom, 6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func addPanePill(atTop: Bool) -> some View {
+        Button {
+            gridModel.addPane(columnIndex: columnIndex, atTop: atTop)
+        } label: {
+            HStack(spacing: 5) {
+                Text("＋").font(.system(size: 12, weight: .semibold))
+                Text(atTop ? "Add above" : "Add below")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(Color(white: 0.9))
+            .padding(.horizontal, 12)
+            .frame(height: 22)
+            .background(Capsule().fill(Self.barFill.opacity(0.95)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(atTop ? "Add a pane above" : "Add a pane below")
+    }
+
+    /// Confirm before actually closing — closing kills the pane's shell and
+    /// whatever it's running, so a stray ✕ click shouldn't be destructive.
+    private func confirmClose() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        if let n = session.name, !n.isEmpty {
+            alert.messageText = "Close “\(n)”?"
+        } else {
+            alert.messageText = "Close this terminal?"
+        }
+        alert.informativeText = "The running shell — and anything it's running (claude, vim, npm…) — will be stopped."
+        alert.addButton(withTitle: "Cancel")   // default — Return / Esc cancels
+        alert.addButton(withTitle: "Close")
+        guard alert.runModal() == .alertSecondButtonReturn else { return }
+        gridModel.closePane(session: session)
     }
 
     private func ctrlBtn(_ label: String, help: String, action: @escaping () -> Void) -> some View {
@@ -452,11 +523,13 @@ struct TerminalColumnView: View {
         // in-place when sessions reorder, preserving NSViews and PTY processes.
         let maxID = column.maximizedSessionID
         let twoPanes = column.sessions.count == 2
+        let solePane = column.sessions.count == 1
         ForEach(Array(column.sessions.enumerated()), id: \.element.id) { idx, session in
             let isMaximized = maxID == session.id
             let isCollapsed = twoPanes && maxID != nil && !isMaximized
             TerminalPaneWrapper(session: session, columnIndex: columnIndex, sessionIndex: idx,
-                                isMaximized: isMaximized, isCollapsed: isCollapsed)
+                                isMaximized: isMaximized, isCollapsed: isCollapsed,
+                                isSolePane: solePane)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottom) {
                     if idx < column.sessions.count - 1 {
