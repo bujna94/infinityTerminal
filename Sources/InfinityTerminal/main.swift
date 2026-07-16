@@ -230,6 +230,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        // Option+Delete — delete the previous word, independent of the
+        // Option-as-Meta setting. Backspace (keyCode 51) isn't a composable
+        // character, so ⌥ should always mean "delete word" here (as in
+        // Terminal.app / iTerm2): ⌥⌫ → ESC DEL, which readline/zsh map to
+        // backward-kill-word.
+        if f == .option, event.keyCode == 51, let term = focusedTerminal() {
+            term.send([0x1b, 0x7f])
+            return nil
+        }
+
         // Cmd+C / Cmd+V — route through the responder chain so SwiftTerm's
         // built-in copy/paste actions fire on whichever terminal has focus.
         if f == .command {

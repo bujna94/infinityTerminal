@@ -1,3 +1,2 @@
 ## What's Changed
-- **Option key now types `#` and other ⌥-composed characters.** SwiftTerm treated Option as a Meta key by default, so `⌥3` sent an `ESC` sequence instead of `#` (and `⌥2` → `€`, etc.) on UK/international layouts. Option now types the composed character, matching Terminal.app.
-- **New "⌥ Meta" toggle.** A toolbar button (and `⌘⌥O` shortcut) lets you switch Option back to a Meta key when you want `⌥B`/`⌥F` word-jump and other ESC sequences. The choice is remembered across launches.
+- **⌥⌫ now deletes the previous word.** Holding Option and pressing Delete deletes a whole word at a time (as in Terminal.app / iTerm2), instead of one character. Works whether or not the "⌥ Meta" toggle is on, matching the existing ⌥←/⌥→ word-jump behavior.
