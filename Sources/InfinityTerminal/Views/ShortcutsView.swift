@@ -54,6 +54,8 @@ struct ShortcutsView: View {
                     ShortcutRow2(keys: ["⌘", "/"],               description: "Show this shortcuts popup")
                     ShortcutRow2(keys: ["⌘", "⇧", "M"],         description: "Toggle minimap")
                     ShortcutRow2(keys: ["⌥", "⌘", "←", "/", "→"], description: "Step a column; hold to smooth-scroll")
+                    ShortcutRow2(keys: ["⌃", "⇥"],               description: "Next column, wraps (⌃⇧⇥ for previous)")
+                    ShortcutRow2(keys: ["⌥", "⌘", "↑", "/", "↓"], description: "Focus the pane above / below")
                     ShortcutRow2(keys: ["⌘", "⌥", "O"],         description: "Toggle Option as Meta key (⌥3 = # when off)")
                 }
                 .padding(.horizontal, 20)

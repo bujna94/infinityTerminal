@@ -18,7 +18,15 @@ class TerminalGridModel: ObservableObject {
 
     /// ID of the pane that currently has keyboard focus (used to draw the
     /// active-pane highlight).
-    @Published var activeSessionID: UUID?
+    @Published var activeSessionID: UUID? {
+        didSet { rememberFocus(activeSessionID) }
+    }
+
+    /// Last pane focused in each column, keyed by column ID. Lets keyboard
+    /// column navigation land back on the pane you were last using there
+    /// instead of always snapping to the top one. In-memory only — the
+    /// snapshot already persists a single global `activeSessionID`.
+    private var lastFocusedByColumn: [UUID: UUID] = [:]
 
     /// Latest known horizontal scroll offset of the grid. Written by
     /// ContentView's scroll preference observer; read at save time and
@@ -65,6 +73,51 @@ class TerminalGridModel: ObservableObject {
     /// Persisted immediately (unlike the view-only minimap/shortcuts toggles)
     /// so the preference survives the next launch.
     func toggleOptionAsMeta() { useOptionAsMetaKey.toggle(); scheduleSave() }
+
+    // MARK: - Keyboard focus
+
+    private func rememberFocus(_ sessionID: UUID?) {
+        guard let sid = sessionID,
+              let col = columns.first(where: { c in c.sessions.contains { $0.id == sid } })
+        else { return }
+        lastFocusedByColumn[col.id] = sid
+    }
+
+    /// Index of the column that currently holds keyboard focus. Keyboard
+    /// navigation steps relative to this rather than to the scroll position —
+    /// the viewport can sit anywhere (trackpad, minimap drag) and "next
+    /// column" should still mean next from where you are typing.
+    var activeColumnIndex: Int? {
+        guard let sid = activeSessionID else { return nil }
+        return columns.firstIndex { c in c.sessions.contains { $0.id == sid } }
+    }
+
+    /// The pane keyboard focus should land on when navigating to a column:
+    ///
+    /// 1. the maximized pane, if there is one — its neighbor is a 30pt strip,
+    ///    so focusing that would be useless;
+    /// 2. `row`, when stepping sideways — staying in the same row keeps the
+    ///    motion spatial. Without this, per-column memory makes the focus ring
+    ///    bounce top/bottom as you tab across the grid;
+    /// 3. the pane last used in this column — for jumps with no row context
+    ///    (Home, first, last);
+    /// 4. the top pane.
+    func focusTarget(inColumn index: Int, preferringRow row: Int? = nil) -> TerminalSession? {
+        guard columns.indices.contains(index) else { return nil }
+        let col = columns[index]
+        if let mid = col.maximizedSessionID,
+           let s = col.sessions.first(where: { $0.id == mid }) { return s }
+        if let row, col.sessions.indices.contains(row) { return col.sessions[row] }
+        if let last = lastFocusedByColumn[col.id],
+           let s = col.sessions.first(where: { $0.id == last }) { return s }
+        return col.sessions.first
+    }
+
+    /// Row (top = 0) of the focused pane within its column, if any.
+    var activeRowIndex: Int? {
+        guard let sid = activeSessionID, let ci = activeColumnIndex else { return nil }
+        return columns[ci].sessions.firstIndex { $0.id == sid }
+    }
 
     // MARK: - Pane operations
 

@@ -164,6 +164,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        // ⌃⇥ / ⌃⇧⇥ — step one column right / left, matching the browser and
+        // editor muscle memory for "next/previous tab". Safe to consume: macOS
+        // terminals can't encode Ctrl+Tab distinctly from a plain Tab (both are
+        // 0x09), so no TUI can be listening for it.
+        if event.keyCode == 48, f == .control || f == [.control, .shift] {
+            let name: Notification.Name = f.contains(.shift) ? .focusColumnPrev : .focusColumnNext
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: name, object: nil)
+            }
+            return nil
+        }
+
         if f == cs {
             switch event.keyCode {
             case 123:   // ⌘⇧← — add column left and scroll to it
@@ -200,6 +212,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case 124:   // ⌥⌘→ — step one column right
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .scrollColumnRight, object: nil)
+                }
+                return nil
+            case 126:   // ⌥⌘↑ — focus the pane above
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .focusPaneUp, object: nil)
+                }
+                return nil
+            case 125:   // ⌥⌘↓ — focus the pane below
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .focusPaneDown, object: nil)
                 }
                 return nil
             default: break
@@ -455,6 +477,15 @@ extension Notification.Name {
     static let jumpToHome         = Notification.Name("InfinityTerminal.jumpToHome")
     static let scrollColumnLeft   = Notification.Name("InfinityTerminal.scrollColumnLeft")
     static let scrollColumnRight  = Notification.Name("InfinityTerminal.scrollColumnRight")
+    /// Tab-style column cycling (⌃⇥ / ⌃⇧⇥). Separate from the scroll* pair
+    /// because these wrap at the ends, while ⌥⌘arrows clamp — those repeat on
+    /// key-hold to smooth-scroll, and a hold that teleports across the whole
+    /// grid would be unusable.
+    static let focusColumnNext    = Notification.Name("InfinityTerminal.focusColumnNext")
+    static let focusColumnPrev    = Notification.Name("InfinityTerminal.focusColumnPrev")
+    /// Move focus between the panes stacked inside the focused column.
+    static let focusPaneUp        = Notification.Name("InfinityTerminal.focusPaneUp")
+    static let focusPaneDown      = Notification.Name("InfinityTerminal.focusPaneDown")
     /// Like jumpToStart but snaps instantly via NSScrollView (used after reset).
     static let jumpToStartInstant = Notification.Name("InfinityTerminal.jumpToStartInstant")
 }

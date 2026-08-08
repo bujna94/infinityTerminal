@@ -147,6 +147,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .jumpToEnd))         { _ in jumpToEnd() }
         .onReceive(NotificationCenter.default.publisher(for: .scrollColumnLeft))  { _ in stepColumn(by: -1) }
         .onReceive(NotificationCenter.default.publisher(for: .scrollColumnRight)) { _ in stepColumn(by: +1) }
+        .onReceive(NotificationCenter.default.publisher(for: .focusColumnPrev))   { _ in stepColumn(by: -1, wrap: true) }
+        .onReceive(NotificationCenter.default.publisher(for: .focusColumnNext))   { _ in stepColumn(by: +1, wrap: true) }
+        .onReceive(NotificationCenter.default.publisher(for: .focusPaneUp))       { _ in stepPane(by: -1) }
+        .onReceive(NotificationCenter.default.publisher(for: .focusPaneDown))     { _ in stepPane(by: +1) }
     }
 
     // MARK: - Layout
@@ -278,34 +282,102 @@ struct ContentView: View {
         if let first = gridModel.columns.first {
             scrollAnchor = .leading
             scrollTarget = first.id
+            focusColumn(0)
         }
     }
 
     private func jumpToHome() {
         guard let homeID = gridModel.homeColumnID,
-              gridModel.columns.contains(where: { $0.id == homeID }) else {
+              let idx = gridModel.columns.firstIndex(where: { $0.id == homeID }) else {
             jumpToStart()
             return
         }
         scrollAnchor = .leading
         scrollTarget = homeID
+        focusColumn(idx)
     }
 
     private func jumpToEnd() {
         if let last = gridModel.columns.last {
             scrollAnchor = .trailing
             scrollTarget = last.id
+            focusColumn(gridModel.columns.count - 1)
         }
     }
 
-    private func stepColumn(by delta: Int) {
-        guard !gridModel.columns.isEmpty else { return }
+    /// Move focus one column. `wrap` cycles past the ends (⌃⇥, tab-style);
+    /// without it the ends clamp (⌥⌘arrows, which repeat on key-hold).
+    private func stepColumn(by delta: Int, wrap: Bool = false) {
+        let count = gridModel.columns.count
+        guard count > 0 else { return }
+        // Step from the focused column, not the scroll position. Deriving it
+        // from `scrollOffset` broke repeat presses: a rightward step anchors
+        // the target at the viewport's trailing edge, so the offset then
+        // reports the column *before* it and the next press re-targets the
+        // same column. Focus is the thing the user is actually moving.
+        let current = gridModel.activeColumnIndex ?? viewportColumnIndex()
+        let target  = wrap
+            ? ((current + delta) % count + count) % count
+            : max(0, min(count - 1, current + delta))
+
+        // Anchor the target at the edge it's arriving from, so the column you
+        // came from stays on screen. A wrap arrives from the opposite side.
+        let wrapped = wrap && ((delta > 0 && target < current) || (delta < 0 && target > current))
+        let forward = wrapped ? delta < 0 : delta > 0
+        scrollAnchor = forward ? .trailing : .leading
+        scrollTarget = gridModel.columns[target].id
+        focusColumn(target, row: gridModel.activeRowIndex)
+    }
+
+    /// Move focus between the panes stacked inside the focused column.
+    private func stepPane(by delta: Int) {
+        guard let ci = gridModel.activeColumnIndex,
+              let sid = gridModel.activeSessionID else { return }
+        let col = gridModel.columns[ci]
+        guard let si = col.sessions.firstIndex(where: { $0.id == sid }) else { return }
+        let target = si + delta
+        guard col.sessions.indices.contains(target) else { return }
+        // The neighbor of a maximized pane is a 30pt strip — restore the even
+        // split first so the pane being focused is actually usable.
+        if col.maximizedSessionID != nil {
+            gridModel.clearMaximize(columnIndex: ci)
+        }
+        focusSession(col.sessions[target])
+    }
+
+    /// Leading visible column — the fallback for when no pane has focus yet.
+    private func viewportColumnIndex() -> Int {
         let windowW = NSApp.mainWindow?.frame.size.width ?? 800
         let primary = max(1, max(400, windowW / 2))
-        let current = Int(scrollOffset / primary)
-        let target  = max(0, min(gridModel.columns.count - 1, current + delta))
-        scrollAnchor = delta > 0 ? .trailing : .leading
-        scrollTarget = gridModel.columns[target].id
+        return max(0, min(gridModel.columns.count - 1, Int(scrollOffset / primary)))
+    }
+
+    /// Move keyboard focus into `index`'s pane so typing goes where the user
+    /// just navigated. Called only from the keyboard paths — trackpad scrolls
+    /// and minimap drags deliberately leave focus alone, so peeking at another
+    /// column never yanks the caret out of a running command.
+    private func focusColumn(_ index: Int, row: Int? = nil, retry: Bool = true) {
+        guard let session = gridModel.focusTarget(inColumn: index, preferringRow: row) else { return }
+        if session.cachedTermView == nil {
+            // A just-added column has no NSView until SwiftUI lays it out;
+            // give it one runloop pass, then give up rather than loop.
+            if retry {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    focusColumn(index, row: row, retry: false)
+                }
+            }
+            return
+        }
+        focusSession(session)
+    }
+
+    private func focusSession(_ session: TerminalSession) {
+        guard let term = session.cachedTermView else { return }
+        if gridModel.activeSessionID != session.id {
+            gridModel.activeSessionID = session.id
+            gridModel.scheduleSave()
+        }
+        (term.window ?? NSApp.mainWindow)?.makeFirstResponder(term)
     }
 }
 
