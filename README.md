@@ -11,6 +11,44 @@ Swift / AppKit and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
 ![App Screenshot 1](resources/screenshot.png)
 ![App Screenshot 2](resources/screenshot2.png)
 
+## Keyboard shortcuts
+
+Press <kbd>⌘</kbd><kbd>/</kbd> in the app for the same list.
+
+### Moving around
+
+| Shortcut | Action |
+| --- | --- |
+| <kbd>⌃</kbd><kbd>⇥</kbd> | Focus the next column (wraps at the end) |
+| <kbd>⌃</kbd><kbd>⇧</kbd><kbd>⇥</kbd> | Focus the previous column (wraps at the start) |
+| <kbd>⌥</kbd><kbd>⌘</kbd><kbd>←</kbd> / <kbd>→</kbd> | Step one column; hold to smooth-scroll |
+| <kbd>⌥</kbd><kbd>⌘</kbd><kbd>↑</kbd> / <kbd>↓</kbd> | Focus the pane above / below |
+| <kbd>⌘</kbd><kbd>⇧</kbd><kbd>H</kbd> | Home — back to the first two columns |
+
+Keyboard navigation moves keyboard focus with it, so what you type lands in the
+pane you just navigated to. Scrolling with the trackpad or dragging the minimap
+deliberately leaves focus alone, so peeking at another column never pulls the
+cursor out of a running command.
+
+### Layout
+
+| Shortcut | Action |
+| --- | --- |
+| <kbd>⌘</kbd><kbd>⇧</kbd><kbd>←</kbd> / <kbd>→</kbd> | Add a column to the left / right |
+| <kbd>⌘</kbd><kbd>⇧</kbd><kbd>R</kbd> | Reset to the original two columns |
+| <kbd>⌘</kbd><kbd>⇧</kbd><kbd>M</kbd> | Toggle the minimap |
+| <kbd>⌘</kbd><kbd>/</kbd> | Show the shortcuts panel (<kbd>Esc</kbd> closes it) |
+
+### Text & appearance
+
+| Shortcut | Action |
+| --- | --- |
+| <kbd>⌘</kbd><kbd>C</kbd> / <kbd>⌘</kbd><kbd>V</kbd> | Copy / paste in the focused pane |
+| <kbd>⌥</kbd><kbd>←</kbd> / <kbd>→</kbd> | Move the cursor by word |
+| <kbd>⌥</kbd><kbd>⌫</kbd> | Delete the previous word |
+| <kbd>⌘</kbd><kbd>=</kbd> / <kbd>⌘</kbd><kbd>-</kbd> / <kbd>⌘</kbd><kbd>0</kbd> | Font size up / down / reset |
+| <kbd>⌘</kbd><kbd>⌥</kbd><kbd>O</kbd> | Toggle Option as Meta (off = <kbd>⌥</kbd><kbd>3</kbd> types #) |
+
 ## Requirements
 
 - macOS 14 (Sonoma) or later
