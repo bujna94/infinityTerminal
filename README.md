@@ -88,6 +88,9 @@ skipped if the Apple credentials aren't present.
 
 ## Releases
 
-Tagged `v1.x.y`; the GitHub release is built and published manually from
-`build-app.sh` output. The `update-web.yml` workflow propagates the release
-notes onto [infinityterminal.com](https://infinityterminal.com).
+Tagged `v1.x.y`. To release, bump `VERSION` and `BUILD_NUMBER` in
+`build-app.sh`, write the notes in `RELEASE_NOTES.md`, then push the tag:
+`release.yml` builds, signs, notarizes, and publishes the GitHub release, using
+`RELEASE_NOTES.md` as its body (it overwrites the notes of a release created by
+hand). The `update-web.yml` workflow then propagates the notes onto
+[infinityterminal.com](https://infinityterminal.com).

@@ -52,9 +52,9 @@ jobs:
               html
           )
 
-          # 3. Download section version line: <p>v1.0.x — ...
+          # 3. Download section version line: <p id="version-tagline">v1.0.x — ...
           html = re.sub(
-              r'(<p>v)[0-9.]+',
+              r'(<p id="version-tagline">v)[0-9.]+',
               rf'\g<1>{version}',
               html
           )
@@ -84,7 +84,7 @@ jobs:
           if items:
               items_html = "\n".join(items)
               html = re.sub(
-                  r'(<ul class="tight">)\s*?(<li>.*?</li>\s*?)+(\s*</ul>)',
+                  r'(<ul class="tight" id="whats-new-list">)\s*?(<li>.*?</li>\s*?)+(\s*</ul>)',
                   rf'\1\n{items_html}\n              \3',
                   html,
                   count=1,
