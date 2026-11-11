@@ -3,8 +3,24 @@
 # Infinity Terminal — Two Rows. Endless Columns.
 
 A native macOS terminal app: a horizontally scrolling grid of terminals,
-always two rows tall and as many columns wide as you want. Built with
-Swift / AppKit and [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
+always two rows tall and as many columns wide as you want. Run several
+Claude Code sessions next to your dev server and prod shells, name and
+color every pane, and swipe between them. Built with Swift / AppKit and
+[SwiftTerm](https://github.com/migueldeicaza/SwiftTerm).
+
+![Scrolling across an Infinity Terminal window with three Claude Code sessions, logs, a system monitor, and prod and staging shells](resources/demo.gif)
+
+## Install
+
+Download the signed, notarized DMG from
+[Releases](https://github.com/bujna94/infinityTerminal/releases/latest)
+or [infinityterminal.com](https://infinityterminal.com), or use Homebrew:
+
+```sh
+brew install --cask bujna94/tap/infinity-terminal
+```
+
+Requires Apple Silicon and macOS 14 or later.
 
 ## Screenshots
 
