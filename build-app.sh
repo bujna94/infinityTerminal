@@ -16,8 +16,8 @@ if [ -f "$(dirname "$0")/.env" ]; then
 fi
 
 PRODUCT="InfinityTerminal"
-VERSION="1.0.31"
-BUILD_NUMBER="32"
+VERSION="1.0.32"
+BUILD_NUMBER="33"
 APP="${PRODUCT}.app"
 DMG="${PRODUCT}-${VERSION}.dmg"
 BUILD_DIR=".build/release"

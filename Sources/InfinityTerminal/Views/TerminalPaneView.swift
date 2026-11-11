@@ -53,10 +53,27 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
             allowMouseReporting = false
         }
 
+        // A selection is pinned to buffer rows. Full-screen TUIs (Claude Code,
+        // vim, less…) scroll by redrawing those rows, so the text slides under
+        // a selection that stays put and the highlight silently covers
+        // different text than the user picked. Snapshot the selected text and
+        // drop the selection if a redraw changed it, so ⌘C never copies the
+        // wrong thing. Limited to the alt screen and mouse-grabbing apps:
+        // ordinary shell output scrolls the whole buffer, which SwiftTerm
+        // already tracks, and skipping it avoids rebuilding a huge Select All
+        // string on every chunk.
+        let watchSelection = selectionActive
+            && (terminal.isCurrentBufferAlternate || terminal.mouseMode != .off)
+        let selectedBefore = watchSelection ? getSelection() : nil
+
         super.dataReceived(slice: slice)
 
         if suppressSelectionWipe {
             allowMouseReporting = true
+        }
+
+        if let selectedBefore, selectionActive, getSelection() != selectedBefore {
+            selectNone()
         }
 
         if preserveScrollback {
@@ -178,6 +195,34 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
         cwdPollTimer?.cancel()
     }
 
+    /// Set when an ⌥-click or ⌥-drag went through to a mouse-grabbing app.
+    /// Apps like Claude Code then draw (and copy) their own selection, which
+    /// only clears when the app sees another click. A plain drag is kept for
+    /// our native selection and never reaches the app, so without help the
+    /// app's highlight lingers next to ours. See `clearAppSelection(at:)`.
+    var appMayHaveSelection = false
+
+    /// Sends the app a left click at `pointInWindow` so it drops its own
+    /// selection, exactly as a normal click there would.
+    func clearAppSelection(at pointInWindow: NSPoint) {
+        appMayHaveSelection = false
+        let cols = terminal.cols, rows = terminal.rows
+        guard terminal.mouseMode != .off, cols > 0, rows > 0,
+              bounds.width > 0, bounds.height > 0 else { return }
+        // SwiftTerm's own hit-testing is internal; the cell size derived from
+        // the grid is within a pixel or two, which is plenty for a click.
+        let p = convert(pointInWindow, from: nil)
+        let pixelX = Int(min(max(p.x, 0), bounds.width))
+        let pixelY = Int(min(max(bounds.height - p.y, 0), bounds.height))
+        let col = min(max(Int(CGFloat(pixelX) * CGFloat(cols) / bounds.width), 0), cols - 1)
+        let row = min(max(Int(CGFloat(pixelY) * CGFloat(rows) / bounds.height), 0), rows - 1)
+        for release in [false, true] {
+            let flags = terminal.encodeButton(button: 0, release: release,
+                                              shift: false, meta: false, control: false)
+            terminal.sendEvent(buttonFlags: flags, x: col, y: row, pixelX: pixelX, pixelY: pixelY)
+        }
+    }
+
     /// Copies the selection with line breaks collapsed into single spaces.
     ///
     /// Programs like Claude Code wrap long lines themselves, emitting a real
@@ -193,6 +238,15 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(Self.joinedAsOneLine(text), forType: .string)
+    }
+
+    // SwiftTerm's validateUserInterfaceItem returns false for any action it
+    // doesn't know, which greyed out "Copy as One Line" in the context menu.
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copyAsOneLine(_:)) {
+            return selectionActive
+        }
+        return super.validateUserInterfaceItem(item)
     }
 
     /// Joins `text` into a single line: each line is trimmed, blank lines are

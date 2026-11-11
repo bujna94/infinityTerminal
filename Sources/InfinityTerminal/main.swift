@@ -236,8 +236,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // ⌥⌘C — copy the selection as one line (joins the hard line
             // breaks that tools like Claude Code insert when wrapping).
-            if ch == "c", let term = focusedTerminal() {
-                term.copyAsOneLine(nil)
+            // Prefers the focused pane, but falls back to whichever pane holds
+            // the selection, so it still works when focus sits elsewhere.
+            if ch == "c" {
+                if let term = terminalForCopy() {
+                    term.copyAsOneLine(nil)
+                } else {
+                    NSSound.beep()
+                }
                 return nil
             }
         }
@@ -310,6 +316,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         while let cur = responder {
             if let term = cur as? InfinityTerminalNSView { return term }
             responder = cur.nextResponder
+        }
+        return nil
+    }
+
+    /// The pane a copy should read from: the focused pane if it has a
+    /// selection, otherwise any pane in the window that does.
+    private func terminalForCopy() -> InfinityTerminalNSView? {
+        if let term = focusedTerminal(), term.selectionActive { return term }
+        var stack: [NSView] = window?.contentView.map { [$0] } ?? []
+        while let view = stack.popLast() {
+            if let term = view as? InfinityTerminalNSView, term.selectionActive { return term }
+            stack.append(contentsOf: view.subviews)
         }
         return nil
     }
@@ -444,10 +462,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // grabbing the mouse — drop reporting for this gesture so
                     // SwiftTerm makes a native selection; restored on mouse-up
                     // below. Holding ⌥ keeps reporting on (click goes to the app).
-                    if !event.modifierFlags.contains(.option),
-                       term.allowMouseReporting, term.terminal.mouseMode != .off {
-                        term.allowMouseReporting = false
-                        self.selectionBypassTerm = term
+                    if term.allowMouseReporting, term.terminal.mouseMode != .off {
+                        if event.modifierFlags.contains(.option) {
+                            // Goes to the app, which may start its own selection.
+                            term.appMayHaveSelection = true
+                        } else {
+                            // Clear the app's selection first so its highlight
+                            // doesn't linger beside the native one.
+                            if term.appMayHaveSelection {
+                                term.clearAppSelection(at: event.locationInWindow)
+                            }
+                            term.allowMouseReporting = false
+                            self.selectionBypassTerm = term
+                        }
                     }
                     break
                 }
