@@ -234,6 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async { self.gridModel.toggleOptionAsMeta() }
                 return nil
             }
+            // ⌥⌘C — copy the selection as one line (joins the hard line
+            // breaks that tools like Claude Code insert when wrapping).
+            if ch == "c", let term = focusedTerminal() {
+                term.copyAsOneLine(nil)
+                return nil
+            }
         }
 
         if f == .command && ch == "/" {

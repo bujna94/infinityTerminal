@@ -178,10 +178,47 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
         cwdPollTimer?.cancel()
     }
 
+    /// Copies the selection with line breaks collapsed into single spaces.
+    ///
+    /// Programs like Claude Code wrap long lines themselves, emitting a real
+    /// newline plus indentation, so a plain copy of a long command pastes as
+    /// several broken lines. A terminal can't tell those apart from genuine
+    /// line breaks, so this is a separate, explicit action rather than the
+    /// default copy.
+    @objc func copyAsOneLine(_ sender: Any?) {
+        guard let text = getSelection(), !text.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(Self.joinedAsOneLine(text), forType: .string)
+    }
+
+    /// Joins `text` into a single line: each line is trimmed, blank lines are
+    /// dropped, a trailing shell continuation backslash is removed, and the
+    /// pieces are joined with one space.
+    static func joinedAsOneLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline)
+            .map { line -> String in
+                var s = line.trimmingCharacters(in: .whitespaces)
+                if s.hasSuffix("\\") {
+                    s.removeLast()
+                    s = s.trimmingCharacters(in: .whitespaces)
+                }
+                return s
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
     // Right-click context menu with Copy / Paste / Select All
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Copy",       action: #selector(copy(_:)),      keyEquivalent: ""))
+        let oneLine = NSMenuItem(title: "Copy as One Line", action: #selector(copyAsOneLine(_:)), keyEquivalent: "")
+        oneLine.target = self
+        menu.addItem(oneLine)
         menu.addItem(NSMenuItem(title: "Paste",      action: #selector(paste(_:)),     keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Select All", action: #selector(selectAll(_:)), keyEquivalent: ""))
         return menu

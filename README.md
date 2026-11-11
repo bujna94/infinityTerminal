@@ -44,6 +44,7 @@ cursor out of a running command.
 | Shortcut | Action |
 | --- | --- |
 | <kbd>⌘</kbd><kbd>C</kbd> / <kbd>⌘</kbd><kbd>V</kbd> | Copy / paste in the focused pane |
+| <kbd>⌥</kbd><kbd>⌘</kbd><kbd>C</kbd> | Copy the selection as one line (fixes long commands that Claude Code wrapped) |
 | <kbd>⌥</kbd><kbd>←</kbd> / <kbd>→</kbd> | Move the cursor by word |
 | <kbd>⌥</kbd><kbd>⌫</kbd> | Delete the previous word |
 | <kbd>⌘</kbd><kbd>=</kbd> / <kbd>⌘</kbd><kbd>-</kbd> / <kbd>⌘</kbd><kbd>0</kbd> | Font size up / down / reset |
