@@ -1,33 +1,55 @@
 name: Update website on release
 
 on:
+  # A release published by hand fires `release`. One created by release.yml
+  # (with the workflow's own token) doesn't, so also run when that finishes.
   release:
     types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: read
 
 jobs:
   update-web:
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'release' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     steps:
       - name: Extract version and release notes
         id: info
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-          # Fetch release body via GitHub API
-          gh api "repos/${{ github.repository }}/releases/tags/${GITHUB_REF_NAME}" --jq '.body' > /tmp/release_body.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed as env, never spliced into the script text.
+          TAG: ${{ github.event.release.tag_name || github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected tag: $TAG"; exit 1
+          fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.body' > /tmp/release_body.md
 
       - name: Clone web repo
+        # WEB_REPO_PAT should be a fine-grained token limited to
+        # bujna94/infinityTerminalWeb with Contents: read and write only.
+        env:
+          WEB_REPO_PAT: ${{ secrets.WEB_REPO_PAT }}
         run: |
-          git clone https://x-access-token:${{ secrets.WEB_REPO_PAT }}@github.com/bujna94/infinityTerminalWeb.git web
+          git clone "https://x-access-token:${WEB_REPO_PAT}@github.com/bujna94/infinityTerminalWeb.git" web
 
       - name: Update index.html
+        env:
+          VERSION: ${{ steps.info.outputs.version }}
         run: |
           cd web
-          python3 - "${{ steps.info.outputs.version }}" /tmp/release_body.md <<'PYEOF'
-          import sys, re
+          python3 - "$VERSION" /tmp/release_body.md <<'PYEOF'
+          import sys, re, html as htmllib
           from datetime import datetime, timezone
 
           version = sys.argv[1]
@@ -75,6 +97,8 @@ jobs:
               line = line.strip()
               if re.match(r'^[-*]\s+', line):
                   line = re.sub(r'^[-*]\s+', '', line)
+                  # Escape first: release notes are text, never raw HTML.
+                  line = htmllib.escape(line, quote=False)
                   # Convert **bold** to <strong>
                   line = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', line)
                   # Convert `code` to <code>
@@ -96,6 +120,8 @@ jobs:
           PYEOF
 
       - name: Commit and push
+        env:
+          VERSION: ${{ steps.info.outputs.version }}
         run: |
           cd web
           git config user.name "github-actions[bot]"
@@ -104,6 +130,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Auto-update to v${{ steps.info.outputs.version }}"
+            git commit -m "Auto-update to v${VERSION}"
             git push
           fi

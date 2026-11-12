@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
   workflow_dispatch: {}
 
-# Required so softprops/action-gh-release can create the GitHub Release.
+# Required so the release step can create the GitHub Release.
 permissions:
   contents: write
 
@@ -16,7 +16,11 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to full commit hashes: a tag can be moved by its
+      # owner, and these steps run while the signing identity is on the runner.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Verify version tag matches build-app.sh
         # Only enforce on tag pushes — workflow_dispatch from a branch has no
@@ -71,8 +75,19 @@ jobs:
           ./build-app.sh --dmg
           ls -la .build/*.dmg
 
+      - name: Remove the signing keychain
+        # Signing is done. Delete the keychain holding the Developer ID
+        # identity before any other step runs, even if the build failed.
+        if: always()
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-dmg
           path: .build/*.dmg
@@ -95,11 +110,19 @@ jobs:
           fi
 
       - name: Create GitHub Release
+        # Uses the preinstalled gh CLI instead of a third-party action.
+        # Re-running for an existing tag replaces the DMG and the notes.
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: .build/*.dmg
-          body_path: ${{ steps.notes.outputs.path }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ steps.notes.outputs.path }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" .build/*.dmg --clobber -R "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --notes-file "$NOTES" -R "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" .build/*.dmg --title "$TAG" \
+              --notes-file "$NOTES" --generate-notes -R "$GITHUB_REPOSITORY"
+          fi

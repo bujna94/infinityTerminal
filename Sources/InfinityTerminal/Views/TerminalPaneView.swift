@@ -24,6 +24,34 @@ final class InfinityTerminalNSView: LocalProcessTerminalView {
     private var cwdPollTimer: DispatchSourceTimer?
     private var lastPolledCwd: String?
 
+    /// Sits between SwiftTerm and this view to vet what programs ask for:
+    /// clipboard writes (OSC 52) and ⌘-clicked hyperlinks (OSC 8). SwiftTerm
+    /// only holds `terminalDelegate` weakly, so the view keeps it alive.
+    private lazy var guardDelegate = TerminalGuardDelegate(view: self)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        terminalDelegate = guardDelegate
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        terminalDelegate = guardDelegate
+    }
+
+    /// True when this pane has keyboard focus in the frontmost app — i.e.
+    /// the user is working in it right now.
+    var isFocusedPane: Bool {
+        guard NSApp.isActive, let window, window.isKeyWindow else { return false }
+        // The first responder can be this view or something inside it.
+        var responder: NSResponder? = window.firstResponder
+        while let cur = responder {
+            if cur === self { return true }
+            responder = cur.nextResponder
+        }
+        return false
+    }
+
     override func dataReceived(slice: ArraySlice<UInt8>) {
         // SwiftTerm's feed() pushes yDisp to yBase on every chunk, yanking the
         // viewport to the bottom even when the user has scrolled up to read
